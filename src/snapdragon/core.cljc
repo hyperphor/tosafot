@@ -4,6 +4,18 @@
 
 (defn- now [] #?(:clj (java.util.Date.) :cljs (js/Date.)))
 
+(defn- parse-inst [s]
+  #?(:clj (java.util.Date/from (java.time.Instant/parse s)) :cljs (js/Date. s)))
+
+(def realm "snapdragon")
+
+(defn annotation-uri [id] (str "hyperphor://" realm "/annotation/" id))
+
+(defn normalize-url
+  "Page identity for annotations: the URL without its fragment."
+  [url]
+  (first (str/split (str url) #"#" 2)))
+
 (def presets
   "Canned questions offered in the popover, in display order."
   [{:id :explain :label "Explain" :question "Explain this."}
@@ -13,12 +25,12 @@
 (def ^:private context-chars 2000)
 
 (defn new-annotation
-  "Build an ephemeral annotation for a selection. `target` is {:exact :prefix :suffix}."
+  "Build an ephemeral annotation. `target` is {:quote {:exact :prefix :suffix} :pos {:start :end}}."
   [{:keys [url title target kind] :or {kind :ask}}]
   {:annotation/id      (random-uuid)
-   :annotation/url     url
+   :annotation/url     (normalize-url url)
    :annotation/title   title
-   :annotation/target  {:quote target}
+   :annotation/target  target
    :annotation/kind    kind
    :annotation/saved?  false
    :annotation/created (now)
@@ -45,6 +57,30 @@
   (let [parent (:msg/id (peek (:annotation/thread ann)))]
     (update ann :annotation/thread conj
             (cond-> msg (and parent (not (:msg/parent msg))) (assoc :msg/parent parent)))))
+
+(defn- kw [x] (some-> x keyword))
+(defn- ->uuid [x] (if (string? x) (parse-uuid x) x))
+(defn- ->inst [x] (if (string? x) (parse-inst x) x))
+
+(defn- revive-message [m]
+  (cond-> (-> m
+              (update :msg/id ->uuid)
+              (update :msg/created ->inst)
+              (update-in [:msg/author :type] kw))
+    (:msg/parent m) (update :msg/parent ->uuid)
+    (:msg/kind m)   (update :msg/kind kw)
+    (:msg/status m) (update :msg/status kw)
+    ;; A reply still streaming when it was saved was cut off.
+    (= "streaming" (name (or (:msg/status m) ""))) (assoc :msg/status :stopped)))
+
+(defn revive
+  "Restore an annotation read back from storage (where keywords, uuids, and dates are strings)."
+  [ann]
+  (-> ann
+      (update :annotation/id ->uuid)
+      (update :annotation/kind kw)
+      (update :annotation/created ->inst)
+      (update :annotation/thread #(mapv revive-message %))))
 
 (defn update-message
   "Apply `f` to the thread message with id `id`."

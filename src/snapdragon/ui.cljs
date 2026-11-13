@@ -32,7 +32,16 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 .note-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: move;
              border-bottom: 1px solid #eee; color: #777; font-size: 11px; user-select: none; }
 .note-head .title { flex: 1; }
-.note-head button { padding: 0 6px; border: none; background: none; font-size: 14px; }
+.note-head button { padding: 0 6px; border: none; background: none; font-size: 11px; color: inherit; }
+.note-head button.close { font-size: 14px; }
+.note-head button.save:disabled { opacity: 1; color: #2a7; }
+.orphans { position: fixed; right: 16px; bottom: 16px; width: 300px; padding: 0; }
+.orphans .badge { padding: 6px 10px; cursor: pointer; font-size: 12px; }
+.orphans ul { list-style: none; margin: 0; padding: 0 0 4px; border-top: 1px solid #eee;
+              max-height: 40vh; overflow-y: auto; }
+.orphans li { padding: 5px 10px; cursor: pointer; }
+.orphans li:hover { background: #f3f0ff; }
+.orphans .first { color: #888; font-size: 12px; }
 .note-body { padding: 7px 10px; overflow-y: auto; flex: 1; min-height: 0; }
 .turn { margin: 0 0 9px; }
 .turn .meta { font-size: 11px; color: #999; margin-bottom: 1px; }
@@ -55,7 +64,8 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   .bubble:hover, button:hover { background: #34343a; }
   button, textarea { background: #2c2c30; border-color: #555; }
   button.primary { background: #3b3360; border-color: #6c5cb5; }
-  .note-head, .composer { border-color: #3a3a3e; }
+  .note-head, .composer, .orphans ul { border-color: #3a3a3e; }
+  .orphans li:hover { background: #34343a; }
   .turn.comment .text { background: #3a3424; }
   .text pre { background: #2c2c30; }
 }
@@ -140,7 +150,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
-  [{:keys [quote on-close on-copy on-ask on-comment on-stop] :as pos}]
+  [{:keys [quote on-close on-copy on-ask on-comment on-stop on-save on-delete] :as pos}]
   (let [ta (h [:textarea {:placeholder "Follow up, or comment…"}])
         ask-btn (atom nil)
         ask (fn [t] (when-not (.-disabled @ask-btn)
@@ -150,7 +160,10 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
                 [:span {:class "title"} "Snapdragon"]
-                [:button {:title "Close" :on-click on-close} "×"]]
+                [:button {:class "save" :title "Keep this note on this page" :on-click on-save} "Save"]
+                [:button {:class "delete" :title "Delete this saved note" :on-click on-delete
+                          :style "display:none"} "Delete"]
+                [:button {:class "close" :title "Close" :on-click on-close} "×"]]
                [:div {:class "note-body"}
                 [:div {:class "quote"} (short-quote quote 200)]
                 [:div {:class "thread"}]]
@@ -226,6 +239,44 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   [^js note busy?]
   (set! (.-disabled (qs note "button.ask")) busy?)
   (set! (.. (qs note "button.stop") -style -display) (if busy? "" "none")))
+
+(defn set-saved!
+  "Reflect whether the note is saved: Save becomes a disabled \"Saved\" label, Delete appears."
+  [^js note saved?]
+  (let [save (qs note "button.save")]
+    (set! (.-disabled save) saved?)
+    (set! (.-textContent save) (if saved? "Saved ✓" "Save"))
+    (set! (.. (qs note "button.delete") -style -display) (if saved? "" "none"))))
+
+(def ^:private status-text
+  {:refused "The model declined to answer."
+   :stopped "Stopped."
+   :error   "This answer failed."})
+
+(defn render-thread!
+  "Append all of `thread`'s messages to a fresh note."
+  [^js note thread]
+  (doseq [m thread]
+    (append-turn! note m)
+    (when-let [s (status-text (:msg/status m))]
+      (set-turn-status! note (str (:msg/id m)) s :error? (= :error (:msg/status m))))))
+
+(defn orphan-panel
+  "Corner badge listing notes that couldn't be placed on the page; (on-open id) opens one."
+  [orphans on-open]
+  (let [list-el (h [:ul {:style "display:none"}
+                    (for [{:annotation/keys [id target thread]} orphans]
+                      [:li {:on-click #(on-open (str id))}
+                       [:div {:class "quote"} (short-quote (get-in target [:quote :exact] "") 100)]
+                       [:div {:class "first"} (short-quote (or (:msg/text (first thread)) "") 80)]])])
+        n (count orphans)]
+    (h [:div {:class "sd orphans"}
+        [:div {:class "badge"
+               :title "The text these notes were attached to wasn't found on this page"
+               :on-click #(set! (.. list-el -style -display)
+                                (if (= "none" (.. list-el -style -display)) "" "none"))}
+         (str "⚠ " n " Snapdragon note" (when (> n 1) "s") " couldn't be placed")]
+        list-el])))
 
 (defn sidenote-position
   "Place a note right of the selection's block if there's room, else below the selection.

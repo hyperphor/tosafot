@@ -9,6 +9,19 @@ const extPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../e
 const requests = [];
 let aborted = false;
 
+// Page variants for re-anchoring tests: the target paragraph shifted, its text changed,
+// or rendered late by script.
+let variant = 'normal';
+const TARGET = '<p id="target">The Curry-Howard correspondence says that implication corresponds to function types.</p>';
+const pageHtml = () => PAGE
+  .replace(TARGET, {
+    normal: TARGET,
+    shifted: '<p>An inserted paragraph that moves everything down.</p>' + TARGET,
+    changed: '<p id="target">The correspondence says implication is a function type.</p>',
+    late: '<div id="slot"></div><script>setTimeout(() => { document.getElementById("slot").outerHTML = '
+          + JSON.stringify(TARGET) + '; }, 800);</script>',
+  }[variant]);
+
 const PAGE = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lean tutorial</title></head>
 <body style="max-width:560px;margin:40px">
 <h1>Propositions as types</h1>
@@ -26,7 +39,7 @@ function sse(res, type, data) {
 const server = http.createServer((req, res) => {
   if (req.method === 'GET') {
     res.writeHead(200, { 'content-type': 'text/html' });
-    return res.end(PAGE);
+    return res.end(pageHtml());
   }
   let body = '';
   req.on('data', d => (body += d));
@@ -142,7 +155,7 @@ try {
     const ts = n?.querySelectorAll('.turn.llm');
     return ts?.length && n.querySelector('button.ask') && !n.querySelector('button.ask').disabled;
   }, { timeout: 10000 });
-  const closeNote = async () => (await $('.note-head button')).click();
+  const closeNote = async () => (await $('.note-head button.close')).click();
 
   // First ask
   await openPopover();
@@ -280,6 +293,106 @@ try {
   check('refused answer is left out of the history', roles === 'user', roles);
   await lastLlmDone();
   await closeNote();
+
+  // ---- Saved notes (milestone 3); a separate URL keeps them apart from the notes above
+  const savedSize = () => page.evaluate(() => CSS.highlights.get('snapdragon-saved')?.size ?? 0);
+  const savedText = () => page.evaluate(() =>
+    [...(CSS.highlights.get('snapdragon-saved') || [])].map(r => r.toString()));
+  const reload = async () => {
+    await page.reload();
+    await page.waitForFunction(() => document.readyState === 'complete');
+  };
+  const clickTarget = async () => {
+    const pt = await page.evaluate(() => {
+      const t = [...document.querySelectorAll('p')].find(p => p.textContent.includes('Curry-Howard')).firstChild;
+      const i = t.data.indexOf('Curry-Howard');
+      const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 27);
+      const b = r.getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    });
+    await page.mouse.click(pt.x, pt.y);
+  };
+  const persistUrl = `${base}/page?persist`;
+  await page.goto(persistUrl);
+  await openPopover();
+  await submit('What is this?');
+  await waitFor('.turn.llm .text', 'proofs to programs');
+  await lastLlmDone();
+  check('new notes start unsaved', (await (await $('.note-head button.save')).evaluate(b => b.textContent)) === 'Save');
+  await (await $('.note-head button.save')).click();
+  check('Save marks the note saved',
+        await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓' && b.disabled));
+  await closeNote();
+  check('closing a saved note leaves a saved highlight', (await savedSize()) === 1);
+
+  await reload();
+  await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 })
+    .catch(() => {});
+  check('saved note is highlighted after reload', (await savedSize()) === 1);
+  check('saved highlight covers the original text', (await savedText())[0] === 'Curry-Howard correspondence',
+        JSON.stringify(await savedText()));
+  check('saved notes start closed', !(await has('.note')));
+  await clickTarget();
+  check('clicking the highlight opens the note', await waitFor('.note', null, 3000).then(() => true, () => false));
+  ts = await turns();
+  check('reopened note has its thread', ts.length === 2 && ts[1].html.includes('proofs to programs'), JSON.stringify(ts));
+  check('reopened note shows as saved',
+        await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓'));
+  await follow('Who named it?');
+  await page.waitForFunction(() =>
+    document.querySelector('snapdragon-host').shadowRoot.querySelectorAll('.turn.llm').length === 2);
+  await lastLlmDone();
+  await closeNote();
+  await reload();
+  await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 });
+  await clickTarget();
+  await waitFor('.note', null, 3000);
+  check('follow-up on a saved note persists', (await turns()).length === 4);
+  const followReq = requests.at(-1).body.messages[0].content;
+  check('follow-up on a reopened note still sends page context',
+        followReq.includes('<selection>Curry-Howard correspondence</selection>') && followReq.includes('proof of a proposition'),
+        followReq);
+  await closeNote();
+
+  variant = 'shifted';
+  await reload();
+  await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 })
+    .catch(() => {});
+  check('note re-anchors after the text moves', JSON.stringify(await savedText()) === '["Curry-Howard correspondence"]',
+        JSON.stringify(await savedText()));
+
+  variant = 'changed';
+  await reload();
+  check('note whose text is gone is listed as an orphan',
+        await waitFor('.orphans .badge', "1 Snapdragon note couldn't be placed", 5000).then(() => true, () => false));
+  check('orphan is not highlighted', (await savedSize()) === 0);
+  await (await $('.orphans .badge')).click();
+  if (process.env.SHOT_ORPHANS) await page.screenshot({ path: process.env.SHOT_ORPHANS });
+  await (await $('.orphans li')).click();
+  await waitFor('.note', null, 3000);
+  check('orphan opens with its thread', (await turns()).length === 4);
+  await (await $('.note-head button.delete')).click();
+  check('delete removes the note and the orphan badge', !(await has('.note')) && !(await has('.orphans')));
+  variant = 'normal';
+  await reload();
+  await new Promise(r => setTimeout(r, 800));
+  check('deleted note stays gone after reload', (await savedSize()) === 0 && !(await has('.orphans')));
+
+  // Comments save automatically; notes still anchor when the page renders their text late
+  await page.goto(`${base}/page?late`);
+  await openPopover();
+  await submit('Check against the HoTT book', true);
+  await waitFor('.turn.comment .text', 'HoTT book');
+  check('commenting saves the note',
+        await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓'));
+  await closeNote();
+  variant = 'late';
+  await reload();
+  check('late-rendered text: note placed once it appears',
+        await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 })
+          .then(() => true, () => false));
+  check('late-rendered text: no orphan badge left', !(await has('.orphans')));
+  variant = 'normal';
 
   // Missing key -> settings prompt
   await setProvider('');

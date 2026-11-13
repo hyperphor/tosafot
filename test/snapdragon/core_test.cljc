@@ -1,6 +1,7 @@
 (ns snapdragon.core-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [hyperphor.tunamelt.codec :as codec]
             [snapdragon.core :as core]))
 
 (def llm {:type :llm :provider "Anthropic" :model "m"})
@@ -66,3 +67,22 @@
     (is (= "More?" (:content (last messages))))
     (testing "blank extra system prompt is omitted"
       (is (= core/system-prompt (:system (core/build-prompt {:extra-system "  " :turns [{:role "user" :content "q"}]})))))))
+
+(deftest url-test
+  (is (= "https://x.org/a?b=1" (core/normalize-url "https://x.org/a?b=1#sec")))
+  (is (= "https://x.org/a" (core/normalize-url "https://x.org/a"))))
+
+(deftest revive-roundtrip-test
+  (testing "an annotation survives tunamelt's JSON codec via revive"
+    (let [ann (-> (core/new-annotation {:url "https://x.org/a#frag" :title "T"
+                                        :target {:quote {:exact "x" :prefix "" :suffix ""}
+                                                 :pos {:start 0 :end 1}}})
+                  (assoc :annotation/saved? true)
+                  (core/add-message (core/message {:type :human} "Why?" :kind :ask))
+                  (core/add-message (core/message llm "So." :status :done)))]
+      (is (= "https://x.org/a" (:annotation/url ann)))
+      (is (= ann (core/revive (codec/roundtrip ann))))))
+  (testing "a reply saved mid-stream revives as stopped"
+    (let [ann (core/add-message (core/new-annotation {:target {}})
+                                (core/message llm "part" :status :streaming))]
+      (is (= :stopped (-> (codec/roundtrip ann) core/revive :annotation/thread first :msg/status))))))

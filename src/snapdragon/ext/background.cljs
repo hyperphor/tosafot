@@ -1,6 +1,8 @@
 (ns snapdragon.ext.background
   "Service worker: runs LLM requests for content scripts over a port."
   (:require [clojure.string :as str]
+            [hyperphor.tunamelt.codec :as codec]
+            [hyperphor.tunamelt.core :as tm]
             [snapdragon.config :as config]
             [snapdragon.core :as core]
             [snapdragon.llm :as llm]))
@@ -36,10 +38,32 @@
       (.addListener (.-onMessage port)
                     (fn [msg] (ask! port ctrl (js->clj msg :keywordize-keys true)))))))
 
-(defn- on-message [^js msg _sender _respond]
-  (when (= "open-options" (.-type msg))
-    (.openOptionsPage js/chrome.runtime))
-  false)
+(defn- ->js [x] (clj->js (codec/jsonable x)))
+
+(defn- store-op
+  "Promise of the reply to an annotation storage message, or nil if `msg` isn't one."
+  [{:keys [type url annotation id]}]
+  (case type
+    "ann/list"   (.then (tm/find "annotation" {:attrs {:annotation/url url}})
+                        #(->js (mapv :obj %)))
+    "ann/put"    (.then (tm/put (core/annotation-uri (:annotation/id annotation)) annotation)
+                        (constantly true))
+    "ann/delete" (tm/delete (core/annotation-uri id))
+    nil))
+
+(defn- on-message [^js msg _sender respond]
+  (let [m (js->clj msg :keywordize-keys true)]
+    (if-let [p (store-op m)]
+      (do (-> p
+              (.then #(respond #js {:ok true :value %}))
+              (.catch (fn [^js e]
+                        (js/console.error "snapdragon store" e)
+                        (respond #js {:ok false :error (.-message e)}))))
+          ;; Keep the channel open for the async reply.
+          true)
+      (do (when (= "open-options" (:type m))
+            (.openOptionsPage js/chrome.runtime))
+          false))))
 
 (defn- on-command [cmd]
   (when (= cmd "ask-selection")
@@ -54,6 +78,7 @@
     (.openOptionsPage js/chrome.runtime)))
 
 (defn init []
+  (tm/configure! {:store "snapdragon" :realm core/realm})
   (.addListener js/chrome.runtime.onConnect on-connect)
   (.addListener js/chrome.runtime.onMessage on-message)
   (.addListener js/chrome.runtime.onInstalled on-installed)

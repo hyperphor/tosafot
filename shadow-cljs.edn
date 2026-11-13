@@ -1,5 +1,6 @@
 ;; Extension builds are release-only: MV3 CSP forbids the eval-based dev loader.
-{:source-paths ["src" "test"]
+;; Tunamelt (persistence) is used from a sibling checkout: ../tunamelt.
+{:source-paths ["src" "test" "../tunamelt/src/cljc" "../tunamelt/src/cljs"]
  :dependencies []
  :builds
  {:content    {:target :browser
