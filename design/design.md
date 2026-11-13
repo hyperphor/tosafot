@@ -97,6 +97,8 @@ When an annotation can't be re-anchored because the page changed, it is kept and
  :annotation/thread   [{:msg/id      uuid
                         :msg/author  {:type :human} | {:type :llm :provider "…" :model "…"}
                         :msg/parent  uuid?  ; for branching follow-ups
+                        :msg/kind    :ask | :comment                          ; human messages
+                        :msg/status  :streaming | :done | :stopped | :refused | :error  ; LLM messages
                         :msg/text    "…"
                         :msg/created inst}]}
 ```

@@ -111,62 +111,108 @@
   (swap! state dissoc :pending))
 
 ;;; Notes
+;; Note state: {:el :snap :annotation :port :streaming (id of the LLM message being streamed)}
+
+(defn- note [id] (get-in @state [:notes id]))
+(defn- update-ann! [id f & args] (apply swap! state update-in [:notes id :annotation] f args))
+(defn- msg-text [id mid]
+  (some #(when (= mid (:msg/id %)) (:msg/text %)) (get-in (note id) [:annotation :annotation/thread])))
 
 (defn- close-note! [id]
-  (when-let [{:keys [el port snap]} (get-in @state [:notes id])]
+  (when-let [{:keys [el port snap]} (note id)]
     (.remove el)
     (unhighlight! (:range snap))
     (some-> port .disconnect)
     (swap! state update :notes dissoc id)))
 
 (defn- schedule-render!
-  "Re-render the answer at most once per frame."
-  [id]
-  (when-not (get-in @state [:notes id :render-pending?])
+  "Re-render a streaming message at most once per frame."
+  [id mid]
+  (when-not (:render-pending? (note id))
     (swap! state assoc-in [:notes id :render-pending?] true)
     (js/requestAnimationFrame
      (fn []
-       (when-let [{:keys [el answer]} (get-in @state [:notes id])]
+       (when-let [{:keys [el]} (note id)]
          (swap! state assoc-in [:notes id :render-pending?] false)
-         (ui/set-answer! el answer))))))
+         (ui/set-turn-text! el (str mid) (msg-text id mid)))))))
 
-(defn- finish! [id author stop-reason]
-  (let [{:keys [el answer]} (get-in @state [:notes id])]
-    (ui/set-answer! el answer)
-    (ui/set-status! el (case stop-reason
-                         "refusal"    "The model declined to answer."
-                         "max_tokens" "(Answer cut off at the token limit.)"
-                         nil))
-    (swap! state update-in [:notes id :annotation]
-           core/add-message (core/message author answer))))
+(defn- end-stream!
+  "Finish streaming message `mid` with `status`, showing `text` under it."
+  [id mid status text & {:keys [error? action]}]
+  (when-let [{:keys [el port]} (note id)]
+    (some-> port .disconnect)
+    (swap! state update-in [:notes id] dissoc :port :streaming)
+    (update-ann! id core/update-message mid assoc :msg/status status)
+    (ui/set-turn-text! el (str mid) (msg-text id mid))
+    (ui/set-turn-status! el (str mid) text :error? error? :action action)
+    (ui/set-busy! el false)))
 
-(defn- on-port-message [id msg]
+(defn- on-port-message [id mid msg]
   (let [{:keys [type provider model text stop-reason message needs-config]}
         (js->clj msg :keywordize-keys true)
-        {:keys [el author]} (get-in @state [:notes id])]
-    (when el
+        {:keys [el streaming]} (note id)]
+    (when (and el (= mid streaming))
       (case type
-        "meta"  (do (swap! state assoc-in [:notes id :author]
-                           {:type :llm :provider provider :model model})
-                    (ui/set-who! el (str provider " · " model)))
-        "delta" (do (when (= "" (get-in @state [:notes id :answer]))
-                      (ui/set-status! el nil))
-                    (swap! state update-in [:notes id :answer] str text)
-                    (schedule-render! id))
-        "done"  (do (swap! state assoc-in [:notes id :done?] true)
-                    (finish! id author stop-reason))
-        "error" (do (swap! state assoc-in [:notes id :done?] true)
-                    (ui/set-status! el message :error? true
-                                    :action (when needs-config
-                                              ["Open settings"
-                                               #(js/chrome.runtime.sendMessage #js {:type "open-options"})])))
+        "meta"  (do (update-ann! id core/update-message mid assoc
+                                 :msg/author {:type :llm :provider provider :model model})
+                    (ui/set-turn-who! el (str mid) model))
+        "delta" (do (when (= "" (msg-text id mid))
+                      (ui/set-turn-status! el (str mid) nil))
+                    (update-ann! id core/update-message mid update :msg/text str text)
+                    (schedule-render! id mid))
+        "done"  (case stop-reason
+                  "refusal"    (end-stream! id mid :refused "The model declined to answer.")
+                  "max_tokens" (end-stream! id mid :done "(Answer cut off at the token limit.)")
+                  (end-stream! id mid :done nil))
+        "error" (end-stream! id mid :error message :error? true
+                             :action (when needs-config
+                                       ["Open settings"
+                                        #(js/chrome.runtime.sendMessage #js {:type "open-options"})]))
         nil))))
 
-(defn- ask! [snap question]
+(defn- add-turn! [id msg]
+  (update-ann! id core/add-message msg)
+  (ui/append-turn! (:el (note id)) msg))
+
+(defn- comment! [id text]
+  (add-turn! id (core/message {:type :human} text :kind :comment)))
+
+(defn- ask! [id question]
+  (when-not (:streaming (note id))
+    (add-turn! id (core/message {:type :human} question :kind :ask))
+    (let [reply (core/message {:type :llm} "" :status :streaming)
+          mid (:msg/id reply)
+          {:keys [el snap annotation]} (note id)]
+      (add-turn! id reply)
+      (ui/set-turn-status! el (str mid) "Thinking…")
+      (ui/set-busy! el true)
+      (swap! state assoc-in [:notes id :streaming] mid)
+      (try
+        (let [port (js/chrome.runtime.connect #js {:name "snapdragon/ask"})]
+          (swap! state assoc-in [:notes id :port] port)
+          (.addListener (.-onMessage port) #(on-port-message id mid %))
+          (.addListener (.-onDisconnect port)
+                        #(when (= mid (:streaming (note id)))
+                           (end-stream! id mid :error "Connection to the extension was lost." :error? true)))
+          (.postMessage port (clj->js {:selection (:text snap)
+                                       :before    (:before snap)
+                                       :after     (:after snap)
+                                       :title     js/document.title
+                                       :url       js/location.href
+                                       :turns     (core/prompt-turns (:annotation/thread annotation))})))
+        (catch :default _
+          (end-stream! id mid :error "Snapdragon was reloaded. Refresh the page to use it." :error? true))))))
+
+(defn- stop! [id]
+  (when-let [mid (:streaming (note id))]
+    (end-stream! id mid :stopped "Stopped.")))
+
+(defn- open-note!
+  "Create a note for `snap` and return its id."
+  [snap kind]
   (close-popover!)
-  (let [ann (-> (core/new-annotation {:url js/location.href :title js/document.title
-                                      :target (:target snap)})
-                (core/add-message (core/message {:type :human} question)))
+  (let [ann (core/new-annotation {:url js/location.href :title js/document.title
+                                  :target (:target snap) :kind kind})
         id (str (:annotation/id ann))
         range (:range snap)
         pos (ui/sidenote-position {:sel-rect   (.getBoundingClientRect range)
@@ -177,29 +223,16 @@
                                    :scroll-y   js/window.scrollY})
         el (ui/sidenote (assoc pos
                                :quote (:text snap)
-                               :question question
                                :on-close #(close-note! id)
+                               :on-ask #(ask! id %)
+                               :on-comment #(comment! id %)
+                               :on-stop #(stop! id)
                                :on-copy #(js/navigator.clipboard.writeText
-                                          (get-in @state [:notes id :answer] ""))))]
+                                          (core/thread->markdown (:annotation (note id))))))]
     (highlight! range)
     (.append (root) el)
-    (swap! state assoc-in [:notes id] {:el el :snap snap :annotation ann :answer ""})
-    (try
-      (let [port (js/chrome.runtime.connect #js {:name "snapdragon/ask"})]
-        (swap! state assoc-in [:notes id :port] port)
-        (.addListener (.-onMessage port) #(on-port-message id %))
-        (.addListener (.-onDisconnect port)
-                      #(when-let [n (get-in @state [:notes id])]
-                         (when-not (:done? n)
-                           (ui/set-status! (:el n) "Connection to the extension was lost." :error? true))))
-        (.postMessage port (clj->js {:selection (:text snap)
-                                     :before    (:before snap)
-                                     :after     (:after snap)
-                                     :title     js/document.title
-                                     :url       js/location.href
-                                     :question  question})))
-      (catch :default _
-        (ui/set-status! el "Snapdragon was reloaded. Refresh the page to use it." :error? true)))))
+    (swap! state assoc-in [:notes id] {:el el :snap snap :annotation ann})
+    id))
 
 ;;; Popover
 
@@ -207,7 +240,8 @@
   (close-popover!)
   (let [el (ui/popover (assoc (end-pos (:range snap))
                               :quote (:text snap)
-                              :on-ask #(ask! snap %)))]
+                              :on-ask #(ask! (open-note! snap :ask) %)
+                              :on-comment #(comment! (open-note! snap :comment) %)))]
     (highlight! (:range snap))
     (.append (root) el)
     (swap! state assoc :popover el :pending snap)

@@ -21,31 +21,43 @@
 button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid #ccc; border-radius: 5px;
          background: #f7f7f9; color: inherit; cursor: pointer; }
 button:hover { background: #ecebf5; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #ece6ff; border-color: #b9a8f0; }
 textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padding: 5px;
            border: 1px solid #ccc; border-radius: 5px; background: #fff; color: inherit; }
+.actions { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
+.actions .spacer { flex: 1; }
 .hint { color: #999; font-size: 11px; margin-top: 3px; }
-.note { width: 360px; max-height: 70vh; display: flex; flex-direction: column; }
+.note { width: 360px; max-height: 75vh; display: flex; flex-direction: column; }
 .note-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: move;
              border-bottom: 1px solid #eee; color: #777; font-size: 11px; user-select: none; }
-.note-head .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-head .title { flex: 1; }
 .note-head button { padding: 0 6px; border: none; background: none; font-size: 14px; }
-.note-body { padding: 7px 10px; overflow-y: auto; }
-.question { font-weight: 600; margin-bottom: 4px; }
-.answer > :first-child { margin-top: 0; }
-.answer > :last-child { margin-bottom: 0; }
-.answer pre { background: #f5f5f7; padding: 6px; border-radius: 4px; overflow-x: auto; }
-.answer code { font-size: 12px; }
-.answer p, .answer ul, .answer ol { margin: .45em 0; }
-.answer ul, .answer ol { padding-left: 1.3em; }
-.status { color: #888; font-size: 12px; margin-top: 4px; }
+.note-body { padding: 7px 10px; overflow-y: auto; flex: 1; min-height: 0; }
+.turn { margin: 0 0 9px; }
+.turn .meta { font-size: 11px; color: #999; margin-bottom: 1px; }
+.turn.human .text { font-weight: 600; }
+.turn.comment .text { font-weight: normal; background: #fff8dc; border-left: 3px solid #e3c35a;
+                      padding: 3px 7px; border-radius: 0 4px 4px 0; }
+.text > :first-child { margin-top: 0; }
+.text > :last-child { margin-bottom: 0; }
+.text pre { background: #f5f5f7; padding: 6px; border-radius: 4px; overflow-x: auto; }
+.text code { font-size: 12px; }
+.text p, .text ul, .text ol { margin: .45em 0; }
+.text ul, .text ol { padding-left: 1.3em; }
+.status { color: #888; font-size: 12px; margin-top: 2px; }
+.status:empty { display: none; }
 .status.error { color: #c0392b; }
-.note-foot { display: flex; gap: 5px; padding: 5px 8px; border-top: 1px solid #eee; }
+.composer { padding: 6px 8px; border-top: 1px solid #eee; }
+.composer textarea { min-height: 2.4em; }
 @media (prefers-color-scheme: dark) {
   .sd { background: #232326; color: #e8e8ea; border-color: #444; }
   .bubble:hover, button:hover { background: #34343a; }
   button, textarea { background: #2c2c30; border-color: #555; }
-  .note-head, .note-foot { border-color: #3a3a3e; }
-  .answer pre { background: #2c2c30; }
+  button.primary { background: #3b3360; border-color: #6c5cb5; }
+  .note-head, .composer { border-color: #3a3a3e; }
+  .turn.comment .text { background: #3a3424; }
+  .text pre { background: #2c2c30; }
 }
 ")
 
@@ -59,6 +71,32 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 (defn- short-quote [s n]
   (core/clip-after (str/replace s #"\s+" " ") n))
 
+(defn- isolate-keys!
+  "Keep page hotkeys from firing while typing in `el`."
+  [^js el]
+  (doseq [t ["keydown" "keyup" "keypress"]]
+    (.addEventListener el t #(.stopPropagation %))))
+
+(defn- composer-keys!
+  "Enter asks, Cmd/Ctrl+Enter comments, Shift+Enter is a newline. Handlers get trimmed text."
+  [^js ta on-ask on-comment]
+  (.addEventListener ta "keydown"
+                     (fn [^js e]
+                       (when (and (= "Enter" (.-key e)) (not (.-shiftKey e)))
+                         (.preventDefault e)
+                         (let [t (str/trim (.-value ta))]
+                           (when (seq t)
+                             (if (or (.-metaKey e) (.-ctrlKey e)) (on-comment t) (on-ask t))))))))
+
+(defn- submit-button
+  "Button that submits the textarea's text to `f`."
+  [label ^js ta f & [cls]]
+  [:button {:class cls
+            :on-click #(let [t (str/trim (.-value ta))] (when (seq t) (f t)))}
+   label])
+
+(def ^:private hint "Enter to ask · ⌘/Ctrl+Enter to comment · Shift+Enter for newline")
+
 (defn bubble [{:keys [on-ask] :as pos}]
   (at (h [:div {:class "sd bubble"
                 ;; preventDefault keeps the page selection alive
@@ -68,25 +106,21 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
       pos))
 
 (defn popover
-  "Question box for a selection. Calls (on-ask question)."
-  [{:keys [quote on-ask] :as pos}]
-  (let [el (h [:div {:class "sd popover"}
+  "Question box for a selection. Calls (on-ask text) or (on-comment text)."
+  [{:keys [quote on-ask on-comment] :as pos}]
+  (let [ta (h [:textarea {:placeholder "Ask about this, or write a comment…"}])
+        el (h [:div {:class "sd popover"}
                [:div {:class "quote"} (short-quote quote 160)]
                [:div {:class "presets"}
                 (for [{:keys [label question]} core/presets]
                   [:button {:on-click #(on-ask question)} label])]
-               [:textarea {:placeholder "Ask about this…"}]
-               [:div {:class "hint"} "Enter to ask · Shift+Enter for newline · Esc to close"]])
-        ta (qs el "textarea")]
-    (.addEventListener ta "keydown"
-                       (fn [^js e]
-                         (when (and (= "Enter" (.-key e)) (not (.-shiftKey e)))
-                           (.preventDefault e)
-                           (let [q (str/trim (.-value ta))]
-                             (when (seq q) (on-ask q))))))
-    ;; Keep page hotkeys from firing while typing
-    (doseq [t ["keydown" "keyup" "keypress"]]
-      (.addEventListener el t #(.stopPropagation %)))
+               ta
+               [:div {:class "actions"}
+                (submit-button "Ask" ta on-ask "primary")
+                (submit-button "Comment" ta on-comment)]
+               [:div {:class "hint"} (str hint " · Esc to close")]])]
+    (composer-keys! ta on-ask on-comment)
+    (isolate-keys! el)
     (at el pos)))
 
 (defn- draggable! [^js el ^js handle]
@@ -104,44 +138,94 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
                                        #js {:once true}))))))
 
 (defn sidenote
-  "Ephemeral note showing a question and its streamed answer."
-  [{:keys [quote question on-close on-copy] :as pos}]
-  (let [el (h [:div {:class "sd note"}
+  "Ephemeral note holding a thread, with a composer for follow-ups and comments.
+  Submitting clears the composer; asking is refused (text kept) while an answer streams."
+  [{:keys [quote on-close on-copy on-ask on-comment on-stop] :as pos}]
+  (let [ta (h [:textarea {:placeholder "Follow up, or comment…"}])
+        ask-btn (atom nil)
+        ask (fn [t] (when-not (.-disabled @ask-btn)
+                      (set! (.-value ta) "")
+                      (on-ask t)))
+        comment (fn [t] (set! (.-value ta) "") (on-comment t))
+        el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
-                [:span {:class "who"} "Snapdragon"]
+                [:span {:class "title"} "Snapdragon"]
                 [:button {:title "Close" :on-click on-close} "×"]]
                [:div {:class "note-body"}
                 [:div {:class "quote"} (short-quote quote 200)]
-                [:div {:class "question"} question]
-                [:div {:class "answer"}]
-                [:div {:class "status"} "Thinking…"]]
-               [:div {:class "note-foot"}
-                [:button {:on-click on-copy} "Copy"]]])]
+                [:div {:class "thread"}]]
+               [:div {:class "composer"}
+                ta
+                [:div {:class "actions"}
+                 (submit-button "Ask" ta ask "primary ask")
+                 (submit-button "Comment" ta comment)
+                 [:button {:class "stop" :on-click on-stop :style "display:none"} "Stop"]
+                 [:span {:class "spacer"}]
+                 [:button {:title "Copy thread as Markdown" :on-click on-copy} "Copy"]]]])]
+    (reset! ask-btn (qs el "button.ask"))
+    (composer-keys! ta ask comment)
+    (isolate-keys! el)
     (draggable! el (qs el ".note-head"))
     (at el pos)))
 
 (defn- render-markdown [md]
   (.sanitize DOMPurify (.parse marked md #js {:async false})))
 
-(defn set-answer! [^js note md]
-  (let [ans (qs note ".answer")]
-    (set! (.-innerHTML ans) (render-markdown md))
-    (doseq [a (array-seq (.querySelectorAll ans "a"))]
-      (.setAttribute a "target" "_blank")
-      (.setAttribute a "rel" "noopener noreferrer"))))
+(defn- hhmm [^js d]
+  (.toLocaleTimeString d js/undefined #js {:hour "numeric" :minute "2-digit"}))
 
-(defn set-who! [^js note s]
-  (set! (.-textContent (qs note ".who")) s))
+(defn- turn-el ^js [^js note id]
+  (qs note (str ".turn[data-id=\"" id "\"]")))
 
-(defn set-status!
-  "Show `s` in the status line; nil hides it. Optional `action` is [label f]."
-  [^js note s & {:keys [error? action]}]
-  (let [st (qs note ".status")]
+(defn- scroll-to-end! [^js note]
+  (let [body (qs note ".note-body")]
+    (set! (.-scrollTop body) (.-scrollHeight body))))
+
+(defn set-turn-text! [^js note id md]
+  (when-let [t (turn-el note id)]
+    (let [body (qs note ".note-body")
+          at-end? (< (- (.-scrollHeight body) (.-scrollTop body) (.-clientHeight body)) 30)
+          text (qs t ".text")]
+      (set! (.-innerHTML text) (render-markdown md))
+      (doseq [a (array-seq (.querySelectorAll text "a"))]
+        (.setAttribute a "target" "_blank")
+        (.setAttribute a "rel" "noopener noreferrer"))
+      (when at-end? (scroll-to-end! note)))))
+
+(defn set-turn-status!
+  "Show `s` under a turn; nil clears it. Optional `action` is [label f]."
+  [^js note id s & {:keys [error? action]}]
+  (when-let [st (some-> (turn-el note id) (qs ".status"))]
     (set! (.-textContent st) (or s ""))
-    (set! (.. st -style -display) (if s "" "none"))
     (set! (.-className st) (if error? "status error" "status"))
     (when-let [[label f] action]
       (.append st " " (h [:button {:on-click f} label])))))
+
+(defn append-turn!
+  "Add a thread message to the note."
+  [^js note {:msg/keys [id author kind text created]}]
+  (let [human? (= :human (:type author))
+        who (cond (= kind :comment) "Note"
+                  human? "You"
+                  :else (or (:model author) "…"))
+        el (h [:div {:class ["turn" (if human? "human" "llm") (when (= kind :comment) "comment")]
+                     :data-id (str id)}
+               [:div {:class "meta"} (str who " · " (hhmm created))]
+               [:div {:class "text"}]
+               [:div {:class "status"}]])]
+    (.append (qs note ".thread") el)
+    (set-turn-text! note (str id) text)
+    (scroll-to-end! note)))
+
+(defn set-turn-who! [^js note id who]
+  (when-let [m (some-> (turn-el note id) (qs ".meta"))]
+    (set! (.-textContent m) (str who " · " (last (str/split (.-textContent m) #" · "))))))
+
+(defn set-busy!
+  "While an answer streams: disable Ask, show Stop."
+  [^js note busy?]
+  (set! (.-disabled (qs note "button.ask")) busy?)
+  (set! (.. (qs note "button.stop") -style -display) (if busy? "" "none")))
 
 (defn sidenote-position
   "Place a note right of the selection's block if there's room, else below the selection.

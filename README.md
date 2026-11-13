@@ -2,7 +2,9 @@
 
 A browser extension for asking an LLM about text on any web page: select text, click **Ask** (or press Alt+Shift+A), pick a preset or type a question, and the answer streams into a sidenote next to the passage. See `design/design.md`.
 
-Status: MVP (milestone 1). Notes are ephemeral and disappear when you close them or leave the page.
+Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up (the model sees the whole thread), **⌘/Ctrl+Enter** adds your own comment without calling the model. Comments are passed to the model as notes on later asks. A note can also start as a comment from the popover. **Stop** cancels a streaming answer; **Copy** puts the thread on the clipboard as Markdown.
+
+Status: milestone 2 (threads and comments). Notes are ephemeral and disappear when you close them or leave the page.
 
 ## Build and install
 

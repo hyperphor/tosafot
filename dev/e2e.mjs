@@ -33,7 +33,7 @@ const server = http.createServer((req, res) => {
   req.on('end', async () => {
     const parsed = JSON.parse(body);
     requests.push({ headers: req.headers, body: parsed });
-    const q = parsed.messages[0].content;
+    const q = parsed.messages.at(-1).content;
     const slow = q.endsWith('slow');
     const refuse = q.endsWith('refuse');
     res.on('close', () => { if (!res.writableEnded) aborted = true; });
@@ -97,8 +97,15 @@ try {
   await page.goto(`${base}/page`);
   await page.waitForFunction(() => window.getComputedStyle(document.body)); // content script idle
 
-  const shadow = (sel) => page.evaluateHandle(
+  // Helpers: everything in the extension UI lives in an open shadow root.
+  const $ = sel => page.evaluateHandle(
     s => document.querySelector('snapdragon-host')?.shadowRoot?.querySelector(s), sel);
+  const has = sel => page.evaluate(
+    s => !!document.querySelector('snapdragon-host')?.shadowRoot?.querySelector(s), sel);
+  const waitFor = (sel, text, timeout = 10000) => page.waitForFunction((s, t) => {
+    const el = document.querySelector('snapdragon-host')?.shadowRoot?.querySelector(s);
+    return el && (!t || el.textContent.includes(t));
+  }, { timeout }, sel, text);
   const select = () => page.evaluate(() => {
     const t = document.querySelector('#target').firstChild;
     const r = document.createRange();
@@ -108,49 +115,55 @@ try {
     getSelection().addRange(r);
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
   });
-  const askVia = async question => {
+  const openPopover = async () => {
     await select();
-    await page.waitForFunction(() =>
-      document.querySelector('snapdragon-host')?.shadowRoot?.querySelector('.bubble'));
-    const bubble = await shadow('.bubble');
-    await bubble.click();
-    await page.waitForFunction(() =>
-      document.querySelector('snapdragon-host').shadowRoot.querySelector('.popover textarea'));
-    await page.keyboard.type(question);
-    await page.keyboard.press('Enter');
+    await waitFor('.bubble');
+    await (await $('.bubble')).click();
+    await waitFor('.popover textarea');
   };
-  const noteState = () => page.evaluate(() => {
+  // Submit text from whichever textarea has focus. mod=true sends Cmd+Enter (comment).
+  const submit = async (text, mod = false) => {
+    await page.keyboard.type(text);
+    if (mod) await page.keyboard.down('Meta');
+    await page.keyboard.press('Enter');
+    if (mod) await page.keyboard.up('Meta');
+  };
+  const follow = async (text, mod = false) => {
+    await (await $('.note .composer textarea')).focus();
+    await submit(text, mod);
+  };
+  const turns = () => page.evaluate(() =>
+    [...document.querySelector('snapdragon-host').shadowRoot.querySelectorAll('.note .turn')].map(t => ({
+      cls: t.className, meta: t.querySelector('.meta').textContent,
+      html: t.querySelector('.text').innerHTML, status: t.querySelector('.status').textContent,
+    })));
+  const lastLlmDone = () => page.waitForFunction(() => {
     const n = document.querySelector('snapdragon-host').shadowRoot.querySelector('.note');
-    if (!n) return null;
-    const st = n.querySelector('.status');
-    return { who: n.querySelector('.who').textContent,
-             html: n.querySelector('.answer').innerHTML,
-             status: st.style.display === 'none' ? null : st.textContent };
-  });
+    const ts = n?.querySelectorAll('.turn.llm');
+    return ts?.length && n.querySelector('button.ask') && !n.querySelector('button.ask').disabled;
+  }, { timeout: 10000 });
+  const closeNote = async () => (await $('.note-head button')).click();
 
-  // Happy path
-  await askVia('What is this?');
-  await page.waitForFunction(() => {
-    const a = document.querySelector('snapdragon-host').shadowRoot.querySelector('.note .answer');
-    return a && a.textContent.includes('proofs to programs');
-  }, { timeout: 10000 }).catch(async e => {
-    console.log('note state:', await noteState(), 'requests:', requests.length);
-    throw e;
-  });
-  const st = await noteState();
-  check('answer streamed and rendered as markdown', st.html.includes('<strong>Curry-Howard</strong>') && st.html.includes('<li>'), st.html);
-  check('header shows provider and model', st.who === 'Anthropic · claude-opus-5-5', st.who);
-  check('status cleared after completion', st.status === null, st.status);
+  // First ask
+  await openPopover();
+  await submit('What is this?');
+  await waitFor('.turn.llm .text', 'proofs to programs');
+  await lastLlmDone();
+  let ts = await turns();
+  check('question and answer appear as turns',
+        ts.length === 2 && ts[0].cls.includes('human') && ts[1].cls.includes('llm'), JSON.stringify(ts));
+  check('answer streamed and rendered as markdown',
+        ts[1].html.includes('<strong>Curry-Howard</strong>') && ts[1].html.includes('<li>'), ts[1].html);
+  check('answer labelled with model', ts[1].meta.startsWith('claude-opus-5-5 · '), ts[1].meta);
+  check('status cleared after completion', ts[1].status === '', ts[1].status);
   const placed = await page.evaluate(() => {
     const n = document.querySelector('snapdragon-host').shadowRoot.querySelector('.note');
     return n.getBoundingClientRect().left > document.querySelector('#target').getBoundingClientRect().right;
   });
   check('note placed in the right margin', placed);
-  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
-  const hl = await page.evaluate(() => CSS.highlights.get('snapdragon')?.size);
-  check('selection highlighted', hl === 1, String(hl));
+  check('selection highlighted', (await page.evaluate(() => CSS.highlights.get('snapdragon')?.size)) === 1);
 
-  const req = requests.at(-1);
+  let req = requests.at(-1);
   check('sends API key and browser-access header',
         req.headers['x-api-key'] === 'test-key' && req.headers['anthropic-dangerous-direct-browser-access'] === 'true');
   check('requests streaming with effort and fallbacks',
@@ -161,27 +174,89 @@ try {
         content.includes('proof of a proposition') && content.endsWith('What is this?'), content);
   check('extra system prompt appended', req.body.system.endsWith('Be brief.'));
 
+  // Comment, then follow-up: comment adds no request, and both reach the next prompt
+  const n = requests.length;
+  await follow('I think this is about Lean specifically', true);
+  await waitFor('.turn.comment .text', 'Lean specifically');
+  check('comment adds a turn without calling the LLM', requests.length === n);
+  check('comment is labelled as a note', (await turns()).at(-1).meta.startsWith('Note · '));
+  await follow('Who named it?');
+  await page.waitForFunction(n => {
+    const ts = document.querySelector('snapdragon-host').shadowRoot.querySelectorAll('.turn.llm');
+    return ts.length === 2 && ts[1].textContent.includes('proofs to programs');
+  }, { timeout: 10000 }, n);
+  await lastLlmDone();
+  req = requests.at(-1);
+  const msgs = req.body.messages;
+  check('follow-up sends the thread as alternating turns',
+        msgs.map(m => m.role).join() === 'user,assistant,user', msgs.map(m => m.role).join());
+  check('first turn keeps the page context', msgs[0].content.includes('<selection>'));
+  check('prior answer is sent back', msgs[1].content.includes('proofs to programs'));
+  check('comment is merged into the follow-up as a note',
+        msgs[2].content === '[note] I think this is about Lean specifically\n\nWho named it?', msgs[2].content);
+  check('composer is cleared after submit',
+        (await page.evaluate(() => document.querySelector('snapdragon-host').shadowRoot
+          .querySelector('.note .composer textarea').value)) === '');
+
+  // Copy puts the thread on the clipboard as Markdown
+  const ctx = browser.defaultBrowserContext();
+  await ctx.overridePermissions(base, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
+  await (await $('.composer button[title^="Copy"]')).click();
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  check('copy exports the thread as Markdown',
+        clip.startsWith('> Curry-Howard correspondence') && clip.includes('**Q:** What is this?') &&
+        clip.includes('**Note:** I think') && clip.includes('**claude-opus-5-5:** The **Curry-Howard**'), clip);
+
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+
+  // Stop mid-stream: aborts the request, keeps the partial, re-enables Ask
+  await follow('slow');
+  await waitFor('.turn.llm:last-child .text', 'tick');
+  check('Ask is disabled while streaming', await page.evaluate(() =>
+    document.querySelector('snapdragon-host').shadowRoot.querySelector('.note button.ask').disabled));
+  const nTurns = (await turns()).length;
+  await follow('typed while busy');
+  const kept = await page.evaluate(() => document.querySelector('snapdragon-host').shadowRoot
+    .querySelector('.note .composer textarea').value);
+  check('Enter while streaming keeps the typed text', kept === 'typed while busy' && (await turns()).length === nTurns, kept);
+  await page.evaluate(() => { document.querySelector('snapdragon-host').shadowRoot
+    .querySelector('.note .composer textarea').value = ''; });
+  await (await $('.note button.stop')).click();
+  await new Promise(r => setTimeout(r, 500));
+  check('Stop aborts the fetch', aborted);
+  ts = await turns();
+  check('stopped answer is kept and marked', ts.at(-1).status === 'Stopped.' && ts.at(-1).html.includes('tick'));
+  check('Ask is re-enabled after stopping', await page.evaluate(() =>
+    !document.querySelector('snapdragon-host').shadowRoot.querySelector('.note button.ask').disabled));
+
   // Close removes note and highlight
-  await (await shadow('.note-head button')).click();
-  check('close removes the note', (await noteState()) === null);
+  await closeNote();
+  check('close removes the note', !(await has('.note')));
   check('close removes highlight', (await page.evaluate(() => CSS.highlights.get('snapdragon')?.size)) === 0);
 
   // Closing mid-stream aborts the request
-  await askVia('slow');
-  await page.waitForFunction(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelector('.note .answer')?.textContent.includes('tick'));
-  await (await shadow('.note-head button')).click();
+  aborted = false;
+  await openPopover();
+  await submit('slow');
+  await waitFor('.turn.llm .text', 'tick');
+  await closeNote();
   await new Promise(r => setTimeout(r, 500));
   check('closing mid-stream aborts the fetch', aborted);
 
+  // A note can start as a comment, with no LLM call
+  const before = requests.length;
+  await openPopover();
+  await submit('Remember to check the HoTT book', true);
+  await waitFor('.turn.comment .text', 'HoTT book');
+  ts = await turns();
+  check('popover comment starts a note without calling the LLM',
+        ts.length === 1 && requests.length === before, JSON.stringify(ts));
+  await closeNote();
+
   // Esc closes the popover even with focus in its textarea
-  await select();
-  await page.waitForFunction(() => document.querySelector('snapdragon-host').shadowRoot.querySelector('.bubble'));
-  await (await shadow('.bubble')).click();
-  await page.waitForFunction(() => document.querySelector('snapdragon-host').shadowRoot.querySelector('.popover'));
+  await openPopover();
   await page.keyboard.press('Escape');
-  check('Esc closes the popover', !(await page.evaluate(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelector('.popover'))));
+  check('Esc closes the popover', !(await has('.popover')));
 
   // Keyboard-command path: background -> content "open-popover"
   await select();
@@ -190,26 +265,28 @@ try {
     const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
     await chrome.tabs.sendMessage(t.id, { type: 'open-popover' });
   });
-  const opened = await page.waitForFunction(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelector('.popover'), { timeout: 3000 })
-    .then(() => true, () => false);
-  check('open-popover message opens the popover', opened);
+  check('open-popover message opens the popover',
+        await waitFor('.popover', null, 3000).then(() => true, () => false));
   await page.keyboard.press('Escape');
 
-  // Refusal is reported
-  await askVia('refuse');
-  await page.waitForFunction(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelector('.note .status')?.textContent.includes('declined'))
-    .then(() => check('refusal is reported', true), async () => check('refusal is reported', false, JSON.stringify(await noteState())));
-  await (await shadow('.note-head button')).click();
+  // Refusal is reported and excluded from later history
+  await openPopover();
+  await submit('refuse');
+  check('refusal is reported',
+        await waitFor('.turn.llm .status', 'declined').then(() => true, () => false));
+  await follow('Try again');
+  await waitFor('.turn.llm:last-child .text', 'proofs to programs');
+  const roles = requests.at(-1).body.messages.map(m => m.role).join();
+  check('refused answer is left out of the history', roles === 'user', roles);
+  await lastLlmDone();
+  await closeNote();
 
   // Missing key -> settings prompt
   await setProvider('');
-  await askVia('Explain');
-  await page.waitForFunction(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelector('.note .status.error'));
-  const err = await noteState();
-  check('missing key shows settings prompt', err.status.includes('No API key') && err.status.includes('Open settings'), err.status);
+  await openPopover();
+  await submit('Explain');
+  check('missing key shows settings prompt',
+        await waitFor('.turn.llm .status.error', 'Open settings').then(() => true, () => false));
 } finally {
   await browser.close();
   server.close();
