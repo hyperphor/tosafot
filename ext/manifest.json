@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Snapdragon",
+  "version": "0.1.0",
+  "description": "Select text on any page and ask an LLM about it.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {"service_worker": "js/background/background.js"},
+  "content_scripts": [
+    {"matches": ["<all_urls>"],
+     "js": ["js/content/content.js"],
+     "run_at": "document_idle"}
+  ],
+  "options_page": "options.html",
+  "action": {"default_title": "Snapdragon"},
+  "commands": {
+    "ask-selection": {
+      "suggested_key": {"default": "Alt+Shift+A"},
+      "description": "Ask about the selected text"
+    }
+  }
+}

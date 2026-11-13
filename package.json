@@ -1,0 +1,19 @@
+{
+  "name": "snapdragon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Select text on any page and ask an LLM about it.",
+  "scripts": {
+    "build": "shadow-cljs release content background options",
+    "test": "shadow-cljs compile test",
+    "e2e": "node dev/e2e.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.17.0",
+    "shadow-cljs": "^3.5.14"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.17",
+    "marked": "^18.2.0"
+  }
+}

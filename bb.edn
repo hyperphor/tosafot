@@ -1,0 +1,8 @@
+{:tasks
+ {build {:doc "Release-build the extension into ext/"
+         :task (shell "npx shadow-cljs release content background options")}
+  test  {:doc "Run cljs unit tests under node"
+         :task (shell "npx shadow-cljs compile test")}
+  e2e   {:doc "Build, then drive the extension in Chrome against a mock LLM"
+         :depends [build]
+         :task (shell "node dev/e2e.mjs")}}}

@@ -1,0 +1,20 @@
+;; Extension builds are release-only: MV3 CSP forbids the eval-based dev loader.
+{:source-paths ["src" "test"]
+ :dependencies []
+ :builds
+ {:content    {:target :browser
+               :output-dir "ext/js/content"
+               :modules {:content {:init-fn snapdragon.ext.content/init}}
+               :release {:compiler-options {:infer-externs :auto :warnings {:infer-warning true}}}}
+  :background {:target :browser
+               :output-dir "ext/js/background"
+               :modules {:background {:init-fn snapdragon.ext.background/init}}
+               :release {:compiler-options {:infer-externs :auto :warnings {:infer-warning true}}}}
+  :options    {:target :browser
+               :output-dir "ext/js/options"
+               :modules {:options {:init-fn snapdragon.ext.options/init}}
+               :release {:compiler-options {:infer-externs :auto :warnings {:infer-warning true}}}}
+  :test       {:target :node-test
+               :output-to "out/test.js"
+               :ns-regexp "-test$"
+               :autorun true}}}
