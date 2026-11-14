@@ -12,7 +12,11 @@
 .sd { position: absolute; font: 13px/1.45 system-ui, -apple-system, sans-serif; color: #1d1d1f;
       background: #fff; border: 1px solid #d8d8de; border-radius: 8px;
       box-shadow: 0 4px 18px rgba(0,0,0,.14); }
-.bubble { padding: 2px 9px; cursor: pointer; font-weight: 600; font-size: 12px; user-select: none; }
+.logo { flex: none; display: block; }
+.bubble { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; cursor: pointer;
+          font-weight: 600; font-size: 12px; user-select: none; }
+.brand { display: flex; align-items: center; gap: 5px; margin: -1px 0 7px; color: #6a5acd;
+         font-size: 11px; font-weight: 600; letter-spacing: .02em; }
 .bubble:hover { background: #f3f0ff; }
 .popover { width: 320px; padding: 8px; }
 .quote { color: #666; font-style: italic; border-left: 3px solid #e3c35a; padding: 1px 0 1px 7px;
@@ -31,12 +35,13 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 .note { width: 360px; max-height: 75vh; display: flex; flex-direction: column; }
 .note-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: move;
              border-bottom: 1px solid #eee; color: #777; font-size: 11px; user-select: none; }
-.note-head .title { flex: 1; }
+.note-head .title { flex: 1; color: #6a5acd; font-weight: 600; }
 .note-head button { padding: 0 6px; border: none; background: none; font-size: 11px; color: inherit; }
 .note-head button.close { font-size: 14px; }
 .note-head button.save:disabled { opacity: 1; color: #2a7; }
 .orphans { position: fixed; right: 16px; bottom: 16px; width: 300px; padding: 0; }
-.orphans .badge { padding: 6px 10px; cursor: pointer; font-size: 12px; }
+.orphans .badge { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer;
+                  font-size: 12px; }
 .orphans ul { list-style: none; margin: 0; padding: 0 0 4px; border-top: 1px solid #eee;
               max-height: 40vh; overflow-y: auto; }
 .orphans li { padding: 5px 10px; cursor: pointer; }
@@ -67,11 +72,34 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   .note-head, .composer, .orphans ul { border-color: #3a3a3e; }
   .orphans li:hover { background: #34343a; }
   .turn.comment .text { background: #3a3424; }
+  .brand, .note-head .title { color: #b3a8f5; }
   .text pre { background: #2c2c30; }
 }
 ")
 
 (defn- px [n] (str (js/Math.round n) "px"))
+
+;;; Same art as assets/icon-small.svg, built as DOM so page CSPs can't block it.
+(def ^:private logo-rects
+  [[4 4 120 120 24 "#5a4abb"]
+   [20 20 88 12 3 "#f0ebff"] [20 38 20 70 3 "#f0ebff"] [88 38 20 70 3 "#f0ebff"]
+   [46 38 36 52 3 "#ffffff"] [46 96 36 12 3 "#f0ebff"]
+   [46 58 36 13 0 "#ffb81c"] [54 43 20 8 2 "#3d2f8f"]])
+
+(defn logo
+  "The Tosafot icon as an inline SVG element, `size` px square."
+  [size]
+  (let [ns "http://www.w3.org/2000/svg"
+        svg (js/document.createElementNS ns "svg")]
+    (doseq [[k v] {"viewBox" "0 0 128 128" "width" size "height" size
+                   "class" "logo" "aria-hidden" "true"}]
+      (.setAttribute svg k v))
+    (doseq [[x y w hh r fill] logo-rects]
+      (let [el (js/document.createElementNS ns "rect")]
+        (doseq [[k v] {"x" x "y" y "width" w "height" hh "rx" r "fill" fill}]
+          (.setAttribute el k v))
+        (.appendChild svg el)))
+    svg))
 
 (defn- at [el {:keys [x y]}]
   (set! (.. el -style -left) (px x))
@@ -111,8 +139,9 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   (at (h [:div {:class "sd bubble"
                 ;; preventDefault keeps the page selection alive
                 :on-mousedown #(.preventDefault %)
-                :on-click on-ask}
-          "Ask"])
+                :on-click on-ask
+                :title "Ask Tosafot about this"}
+          (logo 16) "Ask"])
       pos))
 
 (defn popover
@@ -120,6 +149,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   [{:keys [quote on-ask on-comment] :as pos}]
   (let [ta (h [:textarea {:placeholder "Ask about this, or write a comment…"}])
         el (h [:div {:class "sd popover"}
+               [:div {:class "brand"} (logo 16) "Tosafot"]
                [:div {:class "quote"} (short-quote quote 160)]
                [:div {:class "presets"}
                 (for [{:keys [label question]} core/presets]
@@ -159,6 +189,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
         comment (fn [t] (set! (.-value ta) "") (on-comment t))
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
+                (logo 14)
                 [:span {:class "title"} "Tosafot"]
                 [:button {:class "save" :title "Keep this note on this page" :on-click on-save} "Save"]
                 [:button {:class "delete" :title "Delete this saved note" :on-click on-delete
@@ -275,7 +306,8 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
                :title "The text these notes were attached to wasn't found on this page"
                :on-click #(set! (.. list-el -style -display)
                                 (if (= "none" (.. list-el -style -display)) "" "none"))}
-         (str "⚠ " n " Tosafot note" (when (> n 1) "s") " couldn't be placed")]
+         (logo 16)
+         (str n " Tosafot note" (when (> n 1) "s") " couldn't be placed")]
         list-el])))
 
 (defn sidenote-position

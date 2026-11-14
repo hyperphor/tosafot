@@ -131,9 +131,12 @@ try {
   const openPopover = async () => {
     await select();
     await waitFor('.bubble');
+    if (process.env.SHOT_BUBBLE && !shotBubble) { shotBubble = true; await page.screenshot({ path: process.env.SHOT_BUBBLE }); }
     await (await $('.bubble')).click();
     await waitFor('.popover textarea');
+    if (process.env.SHOT_POPOVER && !shotPopover) { shotPopover = true; await page.screenshot({ path: process.env.SHOT_POPOVER }); }
   };
+  let shotBubble = false, shotPopover = false;
   // Submit text from whichever textarea has focus. mod=true sends Cmd+Enter (comment).
   const submit = async (text, mod = false) => {
     await page.keyboard.type(text);
