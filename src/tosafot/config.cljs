@@ -1,5 +1,6 @@
 (ns tosafot.config
-  "Settings stored in chrome.storage.local.")
+  "Settings stored in chrome.storage.local."
+  (:require [tosafot.core :as core]))
 
 ;; Named for the extension's old name; kept so existing settings survive.
 (def ^:private storage-key "snapdragon/settings")
@@ -22,11 +23,12 @@
      :show-bubble?  true}))
 
 (defn load-settings
-  "Promise of the settings map, merged over defaults."
+  "Promise of the settings map, merged over defaults; :actions includes any new built-ins."
   []
   (-> (.get js/chrome.storage.local storage-key)
       (.then (fn [^js r]
-               (merge defaults (some-> (aget r storage-key) (js->clj :keywordize-keys true)))))))
+               (-> (merge defaults (some-> (aget r storage-key) (js->clj :keywordize-keys true)))
+                   (update :actions core/reconcile-actions))))))
 
 (defn save! [settings]
   (.set js/chrome.storage.local (js-obj storage-key (clj->js settings))))

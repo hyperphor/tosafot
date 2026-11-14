@@ -40,6 +40,37 @@
                     (core/message llm "" :status :stopped)
                     (core/message {:type :human} "B" :kind :ask)))))))
 
+(deftest instructions-test
+  (testing "instructions go to the model with their question, and comments still merge"
+    (is (= [{:role "user" :content "[note] hm\n\nArgue.\n<instructions>Push back.</instructions>"}]
+           (core/prompt-turns
+            (thread (core/message {:type :human} "hm" :kind :comment)
+                    (core/message {:type :human} "Argue." :kind :ask :instructions "Push back."))))))
+  (testing "blank instructions are dropped; markdown omits them"
+    (let [m (core/message {:type :human} "Q" :kind :ask :instructions "")]
+      (is (not (contains? m :msg/instructions))))
+    (is (= "> x\n\n**Q:** Argue."
+           (core/thread->markdown
+            {:annotation/target {:quote {:exact "x"}}
+             :annotation/thread [(core/message {:type :human} "Argue." :kind :ask :instructions "Push back.")]})))))
+
+(deftest actions-test
+  (testing "nil stored list gives the built-ins"
+    (is (= core/builtin-actions (core/reconcile-actions nil))))
+  (testing "stored edits and order are kept; missing built-ins appended"
+    (let [stored [{:id "argue" :label "Fight" :place "toolbar" :prompt "Fight me." :instructions ""}
+                  {:id "c1" :label "Mine" :place "menu" :prompt "Mine?" :instructions ""}]
+          r (core/reconcile-actions stored)]
+      (is (= stored (take 2 r)))
+      (is (= (dec (+ 2 (count core/builtin-actions))) (count r)))
+      (is (= 1 (count (filter #(= "argue" (:id %)) r))))
+      (is (= ["Fight" "Explain"] (map :label (core/actions-at r "toolbar"))))
+      (is (core/builtin? {:id "argue"}))
+      (is (not (core/builtin? {:id "c1"})))))
+  (testing "default placement"
+    (is (= ["Explain"] (map :label (core/actions-at core/builtin-actions "toolbar"))))
+    (is (= ["Define" "Argue" "ELI5"] (map :label (core/actions-at core/builtin-actions "menu"))))))
+
 (deftest markdown-test
   (let [md (core/thread->markdown
             {:annotation/target {:quote {:exact "the\n text"}}
@@ -82,6 +113,11 @@
                   (core/add-message (core/message llm "So." :status :done)))]
       (is (= "https://x.org/a" (:annotation/url ann)))
       (is (= ann (core/revive (codec/roundtrip ann))))))
+  (testing "instructions survive saving, so follow-ups keep them"
+    (let [ann (core/add-message (core/new-annotation {:target {:exact "x"}})
+                                (core/message {:type :human} "Argue." :kind :ask :instructions "Push back."))]
+      (is (= "Argue.\n<instructions>Push back.</instructions>"
+             (-> (codec/roundtrip ann) core/revive :annotation/thread core/prompt-turns first :content)))))
   (testing "a reply saved mid-stream revives as stopped"
     (let [ann (core/add-message (core/new-annotation {:target {}})
                                 (core/message llm "part" :status :streaming))]

@@ -11,7 +11,7 @@
 ;; :pending is the selection snapshot the popover is for.
 ;; :notes maps id -> {:annotation :range (nil for orphans) :el (when open) :port :streaming}.
 ;; Unsaved notes exist only while open; saved ones stay registered when closed.
-(defonce state (atom {:notes {} :show-bubble? true}))
+(defonce state (atom {:notes {} :show-bubble? true :actions core/builtin-actions}))
 
 ;;; Highlights (CSS Custom Highlight API; leaves page DOM untouched).
 ;;; "active" marks open notes and the pending selection; "saved" marks closed saved notes.
@@ -284,9 +284,11 @@
     (assoc (if range (range-context range) {:before prefix :after suffix})
            :selection exact)))
 
-(defn- ask! [id question]
+(defn- ask!
+  "Ask `question` in note `id`; `instructions` go to the model without being shown."
+  [id question & [instructions]]
   (when-not (:streaming (note id))
-    (add-turn! id (core/message {:type :human} question :kind :ask))
+    (add-turn! id (core/message {:type :human} question :kind :ask :instructions instructions))
     (persist! id)
     (let [reply (core/message {:type :llm} "" :status :streaming)
           mid (:msg/id reply)]
@@ -426,21 +428,34 @@
 
 ;;; Popover
 
-(defn- open-popover! [snap]
+(defn- open-popover!
+  "Open the question box on `snap`; `mode` :comment makes commenting the default."
+  [snap & [mode]]
   (close-popover!)
   (let [el (ui/popover (assoc (end-pos (:range snap))
                               :quote (:text snap)
-                              :on-ask #(ask! (new-note! snap :ask) %)
+                              :mode mode
+                              :actions (:actions @state)
+                              :on-ask #(ask! (new-note! snap :ask) %1 %2)
                               :on-comment #(comment! (new-note! snap :comment) %)))]
     (highlight! (:range snap))
     (.append (root) el)
+    (ui/clamp-x! el)
     (swap! state assoc :popover el :pending snap)
     (.focus (.querySelector el "textarea"))))
 
-(defn- show-bubble! [snap]
+(defn- show-toolbar! [snap]
   (remove-key! :bubble)
-  (let [el (ui/bubble (assoc (end-pos (:range snap)) :on-ask #(open-popover! snap)))]
+  (let [el (ui/toolbar (assoc (end-pos (:range snap))
+                              :actions (:actions @state)
+                              :on-ask #(open-popover! snap)
+                              :on-comment #(open-popover! snap :comment)
+                              :on-action (fn [{:keys [prompt instructions]}]
+                                           (ask! (new-note! snap :ask) prompt instructions))
+                              :on-edit #(do (close-popover!)
+                                            (js/chrome.runtime.sendMessage #js {:type "open-options"}))))]
     (.append (root) el)
+    (ui/clamp-x! el)
     (swap! state assoc :bubble el)))
 
 ;;; Events
@@ -473,7 +488,7 @@
 (defn- on-mouseup [e]
   (when (and (not (from-host? e)) (:show-bubble? @state))
     ;; Let the selection settle after the click.
-    (js/setTimeout #(when-let [snap (snapshot)] (show-bubble! snap)) 10)))
+    (js/setTimeout #(when-let [snap (snapshot)] (show-toolbar! snap)) 10)))
 
 (defn- on-keydown [^js e]
   (when (= "Escape" (.-key e))
@@ -490,7 +505,7 @@
 
 (defn- load-prefs! []
   (-> (config/load-settings)
-      (.then #(swap! state assoc :show-bubble? (:show-bubble? %)))
+      (.then #(swap! state merge (select-keys % [:show-bubble? :actions])))
       (.catch (fn [_] nil))))
 
 (defn init []

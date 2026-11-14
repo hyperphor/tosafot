@@ -18,8 +18,19 @@
     .actions { display: flex; gap: .6em; margin-top: 1em; align-items: center; }
     button { padding: 5px 12px; font: inherit; cursor: pointer; }
     .status { color: #2a7; }
+    .status.error { color: #c0392b; }
     .inline { display: flex; gap: .4em; align-items: center; margin: .6em 0; font-size: 14px; color: #222; }
     .inline input { width: auto; }
+    .help { color: #666; font-size: 13px; margin: .2em 0 .8em; }
+    .action-row { border-top: 1px solid #eee; padding: .45em 0; }
+    .action-row.off { opacity: .5; }
+    .action-row .row { gap: .4em; }
+    .action-row .row > .label { flex: 0 0 9em; }
+    .action-row .row > .prompt { flex: 1; }
+    .action-row .row > .place { flex: 0 0 7.5em; }
+    .action-row textarea.instructions { min-height: 0; margin-top: .3em; font-size: 12px; color: #555; resize: vertical; }
+    .row-buttons { display: flex; gap: .25em; flex: none !important; }
+    .row-buttons button { padding: 4px 7px; }
   </style>
 </head>
 <body>

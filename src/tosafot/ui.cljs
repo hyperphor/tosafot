@@ -13,15 +13,26 @@
       background: #fff; border: 1px solid #d8d8de; border-radius: 8px;
       box-shadow: 0 4px 18px rgba(0,0,0,.14); }
 .logo { flex: none; display: block; }
-.bubble { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; cursor: pointer;
-          font-weight: 600; font-size: 12px; user-select: none; }
+.toolbar { display: flex; align-items: center; gap: 1px; padding: 3px; font-weight: 600; font-size: 12px;
+           line-height: 1; user-select: none; white-space: nowrap; }
+.toolbar .ic { padding: 2px 3px; }
+.toolbar .item { padding: 5px 8px; border-radius: 5px; cursor: pointer; }
+.toolbar .item:hover, .toolbar .item.open { background: #f0ecff; }
+.toolbar .more { color: #777; padding: 5px 7px; }
+.toolbar .sep { width: 1px; align-self: stretch; background: #e4e4ea; margin: 3px 2px; }
+.menu { position: absolute; top: calc(100% + 4px); right: 0; min-width: 150px; padding: 4px;
+        background: inherit; border: 1px solid #d8d8de; border-radius: 8px;
+        box-shadow: 0 4px 18px rgba(0,0,0,.14); font-weight: normal; }
+.menu .item { display: block; padding: 7px 9px; }
+.menu hr { border: none; border-top: 1px solid #eee; margin: 4px 2px; }
+.menu .dim { color: #888; }
 .brand { display: flex; align-items: center; gap: 5px; margin: -1px 0 7px; color: #6a5acd;
          font-size: 11px; font-weight: 600; letter-spacing: .02em; }
 .bubble:hover { background: #f3f0ff; }
 .popover { width: 320px; padding: 8px; }
 .quote { color: #666; font-style: italic; border-left: 3px solid #e3c35a; padding: 1px 0 1px 7px;
          margin: 0 0 7px; max-height: 4.4em; overflow: hidden; }
-.presets { display: flex; gap: 5px; margin-bottom: 6px; }
+.presets { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
 button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid #ccc; border-radius: 5px;
          background: #f7f7f9; color: inherit; cursor: pointer; }
 button:hover { background: #ecebf5; }
@@ -66,7 +77,9 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 .composer textarea { min-height: 2.4em; }
 @media (prefers-color-scheme: dark) {
   .sd { background: #232326; color: #e8e8ea; border-color: #444; }
-  .bubble:hover, button:hover { background: #34343a; }
+  .toolbar .item:hover, .toolbar .item.open, button:hover { background: #34343a; }
+  .toolbar .sep, .menu hr { background: #3a3a3e; border-color: #3a3a3e; }
+  .menu { border-color: #444; }
   button, textarea { background: #2c2c30; border-color: #555; }
   button.primary { background: #3b3360; border-color: #6c5cb5; }
   .note-head, .composer, .orphans ul { border-color: #3a3a3e; }
@@ -116,15 +129,16 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
     (.addEventListener el t #(.stopPropagation %))))
 
 (defn- composer-keys!
-  "Enter asks, Cmd/Ctrl+Enter comments, Shift+Enter is a newline. Handlers get trimmed text."
-  [^js ta on-ask on-comment]
+  "Enter calls `on-enter`, Cmd/Ctrl+Enter `on-mod-enter`, Shift+Enter is a newline.
+  Handlers get trimmed text."
+  [^js ta on-enter on-mod-enter]
   (.addEventListener ta "keydown"
                      (fn [^js e]
                        (when (and (= "Enter" (.-key e)) (not (.-shiftKey e)))
                          (.preventDefault e)
                          (let [t (str/trim (.-value ta))]
                            (when (seq t)
-                             (if (or (.-metaKey e) (.-ctrlKey e)) (on-comment t) (on-ask t))))))))
+                             (if (or (.-metaKey e) (.-ctrlKey e)) (on-mod-enter t) (on-enter t))))))))
 
 (defn- submit-button
   "Button that submits the textarea's text to `f`."
@@ -134,32 +148,75 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
    label])
 
 (def ^:private hint "Enter to ask · ⌘/Ctrl+Enter to comment · Shift+Enter for newline")
+(def ^:private comment-hint "Enter to comment · ⌘/Ctrl+Enter to ask · Shift+Enter for newline")
 
-(defn bubble [{:keys [on-ask] :as pos}]
-  (at (h [:div {:class "sd bubble"
-                ;; preventDefault keeps the page selection alive
-                :on-mousedown #(.preventDefault %)
-                :on-click on-ask
-                :title "Ask Tosafot about this"}
-          (logo 16) "Ask"])
-      pos))
+(defn- item
+  "Toolbar/menu entry. mousedown is cancelled so the page selection survives the click."
+  [cls label title f]
+  [:div {:class (str "item " cls) :title title
+         :on-mousedown #(.preventDefault %)
+         :on-click (fn [^js e] (.stopPropagation e) (f))}
+   label])
+
+(defn toolbar
+  "Selection toolbar: Comment, Ask…, the \"toolbar\" actions, and ⋯ for the \"menu\" ones.
+  (on-action action) runs a preset; on-ask / on-comment open the popover."
+  [{:keys [actions on-ask on-comment on-action on-edit] :as pos}]
+  (let [menu (h [:div {:class "menu" :style "display:none"}
+                 (for [a (core/actions-at actions "menu")]
+                   (item "action" (:label a) (:prompt a) #(on-action a)))
+                 (when (seq (core/actions-at actions "menu")) [:hr])
+                 (item "dim edit" "Edit actions…" "Open Tosafot settings" on-edit)])
+        more (h (item "more" "⋯" "More" (fn [])))
+        el (h [:div {:class "sd toolbar"}
+               [:span {:class "ic" :title "Tosafot"} (logo 18)]
+               [:span {:class "sep"}]
+               (item "comment" "Comment" "Write a note on this" on-comment)
+               (item "ask" "Ask…" "Ask a question about this" on-ask)
+               (when-let [as (seq (core/actions-at actions "toolbar"))]
+                 (cons [:span {:class "sep"}]
+                       (for [a as] (item "action" (:label a) (:prompt a) #(on-action a)))))
+               [:span {:class "sep"}]
+               more
+               menu])]
+    (.addEventListener more "click"
+                       #(let [open? (= "none" (.. menu -style -display))]
+                          (set! (.. menu -style -display) (if open? "" "none"))
+                          (.toggle (.-classList more) "open" open?)))
+    (at el pos)))
+
+(defn clamp-x!
+  "Shift an absolutely positioned `el` left so it fits in the viewport."
+  [^js el]
+  (let [max-x (- (+ js/window.scrollX js/document.documentElement.clientWidth) (.-offsetWidth el) 8)]
+    (when (> (.-offsetLeft el) max-x)
+      (set! (.. el -style -left) (px (max js/window.scrollX max-x))))
+    el))
 
 (defn popover
-  "Question box for a selection. Calls (on-ask text) or (on-comment text)."
-  [{:keys [quote on-ask on-comment] :as pos}]
-  (let [ta (h [:textarea {:placeholder "Ask about this, or write a comment…"}])
+  "Question box for a selection. Calls (on-ask text instructions?) or (on-comment text).
+  `mode` :comment makes commenting the default."
+  [{:keys [quote actions on-ask on-comment mode] :as pos}]
+  (let [comment? (= mode :comment)
+        ta (h [:textarea {:placeholder (if comment? "Write a comment…" "Ask about this, or write a comment…")}])
         el (h [:div {:class "sd popover"}
                [:div {:class "brand"} (logo 16) "Tosafot"]
                [:div {:class "quote"} (short-quote quote 160)]
-               [:div {:class "presets"}
-                (for [{:keys [label question]} core/presets]
-                  [:button {:on-click #(on-ask question)} label])]
+               (when-not comment?
+                 [:div {:class "presets"}
+                  (for [{:keys [label prompt instructions]} (core/actions-at actions "toolbar" "menu")]
+                    [:button {:title prompt :on-click #(on-ask prompt instructions)} label])])
                ta
                [:div {:class "actions"}
-                (submit-button "Ask" ta on-ask "primary")
-                (submit-button "Comment" ta on-comment)]
-               [:div {:class "hint"} (str hint " · Esc to close")]])]
-    (composer-keys! ta on-ask on-comment)
+                (if comment?
+                  (list (submit-button "Comment" ta on-comment "primary")
+                        (submit-button "Ask" ta on-ask))
+                  (list (submit-button "Ask" ta on-ask "primary")
+                        (submit-button "Comment" ta on-comment)))]
+               [:div {:class "hint"} (str (if comment? comment-hint hint) " · Esc to close")]])]
+    (if comment?
+      (composer-keys! ta on-comment on-ask)
+      (composer-keys! ta on-ask on-comment))
     (isolate-keys! el)
     (at el pos)))
 

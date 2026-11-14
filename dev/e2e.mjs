@@ -130,9 +130,9 @@ try {
   });
   const openPopover = async () => {
     await select();
-    await waitFor('.bubble');
+    await waitFor('.toolbar');
     if (process.env.SHOT_BUBBLE && !shotBubble) { shotBubble = true; await page.screenshot({ path: process.env.SHOT_BUBBLE }); }
-    await (await $('.bubble')).click();
+    await (await $('.toolbar .item.ask')).click();
     await waitFor('.popover textarea');
     if (process.env.SHOT_POPOVER && !shotPopover) { shotPopover = true; await page.screenshot({ path: process.env.SHOT_POPOVER }); }
   };
@@ -289,6 +289,74 @@ try {
   await page.evaluate(() => getSelection().removeAllRanges());
   check('open-popover replies false without a selection',
         (await sendOpen()) === false && !(await has('.popover')));
+
+  // Selection toolbar and configurable actions
+  await sw.evaluate(async () => {
+    const r = await chrome.storage.local.get('snapdragon/settings');
+    const s = r['snapdragon/settings'];
+    s.actions = [
+      { id: 'explain', label: 'Explain', place: 'toolbar', prompt: 'Explain this.', instructions: '' },
+      { id: 'mine', label: 'Mine', place: 'menu', prompt: 'Do mine.', instructions: 'SECRET-INSTR' },
+      { id: 'argue', label: 'Argue', place: 'off', prompt: 'Argue with this.', instructions: '' },
+    ];
+    await chrome.storage.local.set({ 'snapdragon/settings': s });
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const texts = sel => page.evaluate(s => [...document.querySelector('tosafot-host').shadowRoot
+    .querySelectorAll(s)].map(e => e.textContent), sel);
+  await select();
+  await waitFor('.toolbar');
+  const tbItems = await texts('.toolbar > .item');
+  check('toolbar shows Comment, Ask…, toolbar actions, and ⋯',
+        JSON.stringify(tbItems) === JSON.stringify(['Comment', 'Ask…', 'Explain', '⋯']), JSON.stringify(tbItems));
+  await (await $('.toolbar .more')).click();
+  if (process.env.SHOT_MENU) {
+    await page.screenshot({ path: process.env.SHOT_MENU });
+    await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+    await page.screenshot({ path: process.env.SHOT_MENU.replace(/\.png$/, '-light.png') });
+    await page.emulateMediaFeatures([]);
+  }
+  const menuItems = await texts('.toolbar .menu .item');
+  check('⋯ menu lists menu actions (custom first, new built-ins appended), not "off" ones',
+        menuItems[0] === 'Mine' && menuItems.includes('Define') && !menuItems.includes('Argue')
+        && menuItems.at(-1) === 'Edit actions…', JSON.stringify(menuItems));
+  await (await $('.toolbar .menu .item.action')).click();
+  await waitFor('.note');
+  check('a menu action opens a note directly, without the popover', !(await has('.popover')) && !(await has('.toolbar')));
+  await lastLlmDone();
+  const actReq = requests.at(-1).body.messages.at(-1).content;
+  check('action instructions are sent to the model', actReq.endsWith('Do mine.\n<instructions>SECRET-INSTR</instructions>'), actReq);
+  ts = await turns();
+  check('action instructions are not shown in the thread',
+        ts[0].html.includes('Do mine.') && !ts.some(t => t.html.includes('SECRET')), JSON.stringify(ts[0]));
+  await closeNote();
+
+  let nreq = requests.length;
+  await select();
+  await waitFor('.toolbar');
+  await (await $('.toolbar > .item.action')).click();
+  await waitFor('.note');
+  await lastLlmDone();
+  check('a toolbar action asks its question', requests.length === nreq + 1 &&
+        requests.at(-1).body.messages.at(-1).content.endsWith('Explain this.'));
+  check('a toolbar-started note highlights its text', (await page.evaluate(() => CSS.highlights.get('tosafot')?.size)) === 1);
+  await closeNote();
+  check('closing it removes the highlight', (await page.evaluate(() => CSS.highlights.get('tosafot')?.size)) === 0);
+
+  nreq = requests.length;
+  await select();
+  await waitFor('.toolbar');
+  await (await $('.toolbar .item.comment')).click();
+  await waitFor('.popover textarea');
+  check('Comment opens the popover in comment mode, without presets',
+        (await texts('.popover .actions button.primary'))[0] === 'Comment' && !(await has('.popover .presets')));
+  await submit('Toolbar comment');
+  await waitFor('.turn.comment .text', 'Toolbar comment');
+  check('Enter in comment mode comments without calling the LLM', requests.length === nreq);
+  await (await $('.note-head button.delete')).click();
+  check('popover presets come from enabled actions',
+        await (async () => { await openPopover(); const b = await texts('.popover .presets button');
+                             await page.keyboard.press('Escape'); return b[0] === 'Explain' && b[1] === 'Mine' && !b.includes('Argue'); })());
 
   // Refusal is reported and excluded from later history
   await openPopover();

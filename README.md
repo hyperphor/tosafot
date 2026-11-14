@@ -1,6 +1,8 @@
 # Tosafot
 
-A browser extension for asking an LLM about text on any web page: select text, click **Ask** (or press Alt+Shift+A, or click the toolbar button), pick a preset or type a question, and the answer streams into a sidenote next to the passage. See `design/design.md`.
+A browser extension for asking an LLM about text on any web page. Select text and a small toolbar appears: **Comment** or **Ask…** opens a box to write in, and actions like **Explain** (more under **⋯**) ask a canned question right away. The answer streams into a sidenote next to the passage. Alt+Shift+A, or the extension's toolbar button, opens the Ask box directly. See `design/design.md`.
+
+Actions are configurable on the settings page: each has a name, the question it asks (shown in the thread), optional extra instructions to the model (sent with the question but not shown), and whether it's on the toolbar, under ⋯, or off. A library of built-ins (Argue, Steelman, Find the flaw, Quiz me, …) starts mostly off; you can add your own.
 
 Named for the tosafot ("additions"), the medieval commentaries printed in the margins of the Talmud page.
 
@@ -14,7 +16,7 @@ Status: milestone 3 (saved notes, re-anchoring, orphan list).
 
 Unzip `tosafot-<version>.zip` somewhere permanent, go to `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and choose the unzipped folder. Chrome 105 or later. To upgrade, unzip the new version over the same folder and click reload on the extension card. Keep the folder where it is: an unpacked extension's ID, and so its saved notes, is tied to its path. Removing the extension deletes its notes.
 
-The package is for a fresh install or another machine. If you build from source, keep loading `ext/` instead: a second copy loaded from another folder is a separate extension with its own (empty) notes, and running both doubles every bubble and sidenote.
+The package is for a fresh install or another machine. If you build from source, keep loading `ext/` instead: a second copy loaded from another folder is a separate extension with its own (empty) notes, and running both doubles every toolbar and sidenote.
 
 ## Build
 
@@ -57,9 +59,9 @@ EXT_DIR=path node dev/e2e.mjs   # same, against another unpacked copy (e.g. an u
 
 | Path | What |
 |---|---|
-| `src/tosafot/core.cljc` | annotation/thread data model, prompt construction |
+| `src/tosafot/core.cljc` | annotation/thread data model, actions library, prompt construction |
 | `src/tosafot/llm.cljs` | provider adapters, fetch + SSE streaming |
-| `src/tosafot/ui.cljs`, `dom.cljs` | popover and sidenote components (shadow DOM) |
+| `src/tosafot/ui.cljs`, `dom.cljs` | selection toolbar, popover, and sidenote components (shadow DOM) |
 | `src/tosafot/anchor.cljc` | text-quote/position selectors and re-anchoring |
 | `src/tosafot/config.cljs` | settings storage |
 | `src/tosafot/ext/` | extension entry points: content script, service worker, options page |

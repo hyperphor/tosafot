@@ -51,7 +51,7 @@ Everything runs in the browser. There is no backend.
 ```
 ┌──────────────── page ────────────────┐
 │ content script                       │
-│  - selection capture + "Ask" popover │
+│  - selection toolbar + "Ask" popover │
 │  - anchoring / highlight rendering   │
 │  - sidenote / thread UI (shadow DOM) │
 └──────────────┬───────────────────────┘
@@ -66,7 +66,15 @@ Everything runs in the browser. There is no backend.
 ```
 
 - **Manifest V3** extension. Chrome first, Firefox if it's cheap.
-- **Content script** captures the selection, shows a small popover (preset prompts plus a free-text box), and renders highlights and threads. The UI lives in a shadow root so page CSS doesn't interfere.
+- **Content script** captures the selection, shows a selection toolbar and the Ask popover (preset prompts plus a free-text box), and renders highlights and threads. The UI lives in a shadow root so page CSS doesn't interfere.
+
+### Selection toolbar and actions
+
+Selecting text shows a toolbar: the icon, **Comment** and **Ask…** (both open the popover; Comment makes commenting the default), the actions placed on the toolbar, and **⋯** for the rest plus "Edit actions…". Running an action skips the popover and starts a note.
+
+An action is `{:id :label :prompt :instructions :place}`, with `:place` one of `"toolbar"`, `"menu"`, `"off"`; list order is display order. `:prompt` is the question shown in the thread; `:instructions` are stored on the message as `:msg/instructions` and sent inside `<instructions>` tags in that user turn, so they survive follow-ups and saving. Built-ins can be edited, reordered, turned off, or reset, but not deleted; on load, built-ins missing from the stored list are appended at their default place, so new ones show up after upgrades. Custom actions get a uuid id.
+
+Deferred: a Highlight action (save a passage with no thread) and keyboard letters for menu items.
 - **Service worker** makes the LLM calls. Declaring the provider hosts in `host_permissions` avoids the CORS problems a page script would hit. Anthropic's direct-browser-access header may still be needed. UUNAPI keys are stored in extension storage and never exposed to the page.
 - **Options page** holds provider and model configuration and any global settings.
 
