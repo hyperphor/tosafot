@@ -18,6 +18,12 @@ So this should be both a separate "product" and a library.
 
 # Use cases
 
+## Flaming commentary
+
+I do this by hand now – cutting and pasting quotes. Do it inline, then pull out with an Export, then send
+
+Note this might call for ediitng
+
 ## Learning  anything complicated off a web text
 
 You want to be able to ask questions. The answer doesn't necessarily have to be preserved, it can be an option, the temporary ones are just fine.

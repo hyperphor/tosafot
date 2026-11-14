@@ -125,8 +125,6 @@ I need to settle what "SQLite in an extension" means in practice. Options:
 
 The plan is to keep storage behind a small protocol so the backend can move from IndexedDB to SQLite later. JSON export/import from the start also gives backup and a path to sync or sharing.
 
-### Good, see it makes sense to port tunamelt to cljs
-
 ## Implementation language
 
 ClojureScript, built with shadow-cljs, with separate builds/modules for the content script, service worker, and options page. Babashka can handle scripting and tooling.
@@ -157,6 +155,3 @@ Reuse hyperphor libraries where it makes sense. Some will need porting to cljc, 
 - How much page context should go to the LLM, and should it be configurable per prompt?
 - Is there a Logseq plugin path, or is the PKG use case ThirdMind-only?
 
-## Feedback
-
-People to show it to: friends, the protocol community, maybe Shrager. A side benefit is publicity for the hyperphor name.
