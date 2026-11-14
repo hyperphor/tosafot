@@ -84,21 +84,19 @@
              :annotation/target {:quote {:exact "one two"}}
              :annotation/thread [(core/message {:type :human} "Why?" :kind :ask)
                                  (core/message llm "**Because** so." :status :done)]}]
-    (testing "first answer, quote, title, deep link"
-      (is (= "Because so.\n\n“one two”\nPage https://x.org/a#:~:text=one%20two"
+    (testing "quote, first answer, title, link"
+      (is (= "“one two”\n\nBecause so.\n\nPage https://x.org/a"
              (core/share-text ann :x))))
     (testing "the user's notes win over answers"
       (is (str/starts-with?
            (core/share-text (update ann :annotation/thread conj
                                     (core/message {:type :human} "Mine." :kind :comment)) :x)
-           "Mine.\n\n")))
+           "“one two”\n\nMine.\n\n")))
     (testing "long bodies are clipped to the service limit"
       (let [long (update ann :annotation/thread conj
                          (core/message {:type :human} (str/join " " (repeat 200 "word")) :kind :comment))]
         (is (<= (count (core/share-text long :bluesky)) 300))
-        (is (str/ends-with? (core/share-text long :bluesky) "#:~:text=one%20two")))))
-  (is (= "https://x.org/a#:~:text=a%20b%20c%20d,f%20g%20h%20i%2Dj"
-         (core/text-fragment-url "https://x.org/a" "a b c d e f g h i-j")))
+        (is (str/ends-with? (core/share-text long :bluesky) "Page https://x.org/a")))))
   (is (= "https://bsky.app/intent/compose?text=a%20b" (core/share-url :bluesky "a b"))))
 
 (deftest clip-test

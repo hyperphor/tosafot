@@ -227,7 +227,7 @@ try {
   check('share menu closes after a pick', await page.evaluate(() => document.querySelector('tosafot-host')
     .shadowRoot.querySelector('.share .menu').style.display === 'none'));
 
-  // Post to Bluesky opens its compose page with the note, quote, and a deep link
+  // Post to Bluesky opens its compose page with the quote, note, and page link
   await (await $('.note-head .share-btn')).click();
   if (process.env.SHOT_SHARE) await page.screenshot({ path: process.env.SHOT_SHARE });
   const [bsky] = await Promise.all([
@@ -235,9 +235,9 @@ try {
     (await $('.share .menu button[title*="Bluesky"]')).click(),
   ]);
   const post = new URL(bsky.url()).searchParams.get('text');
-  check('bluesky post has note, quote, and text-fragment link',
-        post.startsWith('I think this is about Lean') && post.includes('“Curry-Howard correspondence”') &&
-        post.includes('#:~:text=Curry%2DHoward%20correspondence') && post.length <= 300, post);
+  check('bluesky post has quote, then note, then plain page link',
+        post.startsWith('“Curry-Howard correspondence”\n\nI think this is about Lean') &&
+        post.endsWith('/page') && post.length <= 300, post);
   await (await bsky.page())?.close();
 
   if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
