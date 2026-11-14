@@ -165,6 +165,59 @@
                       (str "**" (if (= :comment (:msg/kind m)) "Note" "Q") ":** " (:msg/text m))
                       (str "**" (get-in m [:msg/author :model] "LLM") ":** " (:msg/text m)))))))
 
+;;; Sharing to social media via each service's compose page; no accounts or config.
+
+(def share-services
+  "Compose URL prefix, length limit, and the length a URL counts as (nil: its real length)."
+  {:x        {:label "X"        :limit 280 :url-len 23  :base "https://x.com/intent/post?text="}
+   :bluesky  {:label "Bluesky"  :limit 300 :url-len nil :base "https://bsky.app/intent/compose?text="}
+   :mastodon {:label "Mastodon" :limit 500 :url-len 23  :base "https://share.joinmastodon.org/#text="}})
+
+(defn- enc [s] #?(:clj (-> (java.net.URLEncoder/encode (str s) "UTF-8") (str/replace "+" "%20"))
+                  :cljs (js/encodeURIComponent s)))
+
+(defn text-fragment-url
+  "`url` with a #:~:text= fragment that scrolls to and highlights `quote`."
+  [url quote]
+  (let [words (str/split (str/trim (str/replace (str quote) #"\s+" " ")) #" ")
+        frag (fn [ws] (-> (enc (str/join " " ws)) (str/replace "-" "%2D")))]
+    (cond
+      (str/blank? quote)   url
+      (<= (count words) 8) (str url "#:~:text=" (frag words))
+      :else (str url "#:~:text=" (frag (take 4 words)) "," (frag (take-last 4 words))))))
+
+(defn- plain
+  "Markdown reduced to plain text, roughly."
+  [md]
+  (-> md
+      (str/replace #"(?m)^#+\s*" "")
+      (str/replace #"\*\*|__|`" "")
+      (str/replace #"(?m)^\s*[-*]\s+" "• ")
+      (str/replace #"\n{3,}" "\n\n")
+      str/trim))
+
+(declare clip-after)
+
+(defn share-text
+  "A post for `service` (a key of share-services): the user's notes (else the first answer),
+  the quote, and the page title and link, clipped to fit."
+  [{:annotation/keys [target thread title url]} service]
+  (let [{:keys [limit url-len]} (share-services service)
+        quote (str/trim (str/replace (get-in target [:quote :exact] "") #"\s+" " "))
+        link (text-fragment-url url quote)
+        notes (filter #(and (human? %) (= :comment (:msg/kind %))) thread)
+        body (plain (if (seq notes)
+                      (str/join "\n\n" (map :msg/text notes))
+                      (or (some #(when (and (not (human? %)) (usable? %)) (:msg/text %)) thread) "")))
+        title (clip-after (str/trim (or title "")) 60)
+        q (when (seq quote) (str "“" (clip-after quote 140) "”\n"))
+        tail (str q (when (seq title) (str title " ")))
+        room (- limit (or url-len (count link)) (count tail) 2)
+        body (when (and (seq body) (>= room 20)) (str (clip-after body (dec room)) "\n\n"))]
+    (str body tail link)))
+
+(defn share-url [service text] (str (:base (share-services service)) (enc text)))
+
 (defn clip-before
   "Last `n` chars of `s`, cut back to a word boundary when clipped."
   [s n]

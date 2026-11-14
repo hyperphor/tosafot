@@ -362,7 +362,10 @@
                                    :actions (:actions @state)
                                    :on-action (fn [{:keys [prompt instructions]}] (ask! id prompt instructions))
                                    :on-copy #(js/navigator.clipboard.writeText
-                                              (core/thread->markdown (:annotation (note id))))))]
+                                              (core/thread->markdown (:annotation (note id))))
+                                   :on-share #(js/window.open
+                                               (core/share-url % (core/share-text (:annotation (note id)) %))
+                                               "_blank" "noopener")))]
         (ui/render-thread! el (:annotation/thread annotation))
         (ui/set-saved! el (boolean (:annotation/saved? annotation)))
         (highlight! range)

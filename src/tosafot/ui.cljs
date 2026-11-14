@@ -75,11 +75,18 @@ a.home:hover .title { text-decoration: underline; }
 .status.error { color: #c0392b; }
 .composer { padding: 6px 8px; border-top: 1px solid #eee; }
 .composer textarea { min-height: 2.4em; }
+.share { position: relative; }
+.share .menu { top: auto; bottom: calc(100% + 4px); min-width: 170px; background: #fff; }
+.menu button.item { display: block; width: 100%; text-align: left; border: none; background: none;
+                    border-radius: 5px; font-size: 13px; }
+.menu button.item:hover { background: #f0ecff; }
 @media (prefers-color-scheme: dark) {
   .sd { background: #232326; color: #e8e8ea; border-color: #444; }
   .toolbar .item:hover, .toolbar .item.open, button:hover { background: #34343a; }
   .toolbar .sep, .menu hr { background: #3a3a3e; border-color: #3a3a3e; }
   .menu { border-color: #444; }
+  .share .menu { background: #232326; }
+  .menu button.item:hover { background: #34343a; }
   button, textarea { background: #2c2c30; border-color: #555; }
   button.primary { background: #3b3360; border-color: #6c5cb5; }
   .note-head, .composer, .orphans ul { border-color: #3a3a3e; }
@@ -213,10 +220,30 @@ a.home:hover .title { text-decoration: underline; }
                                        #(js/document.removeEventListener "mousemove" move)
                                        #js {:once true}))))))
 
+(defn- share-menu
+  "Share button with a menu: Copy Markdown, then (on-share service) for each share-services key."
+  [on-copy on-share]
+  (let [menu (h [:div {:class "menu" :style "display:none"}])
+        show! #(set! (.. menu -style -display) (if % "" "none"))
+        pick (fn [f] (fn [] (show! false) (f)))]
+    (.append menu
+             (h [:button {:class "item" :title "Copy thread as Markdown" :on-click (pick on-copy)}
+                 "Copy Markdown"])
+             (h [:hr]))
+    (doseq [[k {:keys [label]}] core/share-services]
+      (.append menu (h [:button {:class "item" :title (str "Open a " label " post with this note")
+                                 :on-click (pick #(on-share k))}
+                        (str "Post to " label "…")])))
+    (h [:span {:class "share"}
+        [:button {:class "share-btn" :title "Copy or post this note"
+                  :on-click #(show! (= "none" (.. menu -style -display)))}
+         "Share ▾"]
+        menu])))
+
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
-  [{:keys [quote on-close on-copy on-ask on-comment on-stop on-save on-delete
+  [{:keys [quote on-close on-copy on-share on-ask on-comment on-stop on-save on-delete
            actions on-action mode] :as pos}]
   (let [comment-first (atom (= mode :comment))
         ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
@@ -249,7 +276,7 @@ a.home:hover .title { text-decoration: underline; }
                  (submit-button "Comment" ta comment)
                  [:button {:class "stop" :on-click on-stop :style "display:none"} "Stop"]
                  [:span {:class "spacer"}]
-                 [:button {:title "Copy thread as Markdown" :on-click on-copy} "Copy"]]]])]
+                 (share-menu on-copy on-share)]]])]
     (reset! ask-btn (qs el "button.ask"))
     ;; Started from Comment, Enter comments until the first submission.
     (composer-keys! ta #(if @comment-first (comment %) (ask %)) #(if @comment-first (ask %) (comment %)))
