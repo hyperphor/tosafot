@@ -65,21 +65,21 @@
             (.openOptionsPage js/chrome.runtime))
           false))))
 
-(defn- open-popover
-  "Ask the tab's content script to open the popover; Promise of whether it did."
+(defn- open-note
+  "Ask the tab's content script to open a note on the selection; Promise of whether it did."
   [^js tab]
-  (-> (.sendMessage js/chrome.tabs (.-id tab) #js {:type "open-popover"})
+  (-> (.sendMessage js/chrome.tabs (.-id tab) #js {:type "open-note"})
       (.then boolean)
       (.catch (constantly false))))
 
 (defn- on-command [cmd]
   (when (= cmd "ask-selection")
     (-> (.query js/chrome.tabs #js {:active true :currentWindow true})
-        (.then (fn [^js tabs] (some-> (aget tabs 0) open-popover))))))
+        (.then (fn [^js tabs] (some-> (aget tabs 0) open-note))))))
 
 ;; Toolbar button: ask about the selection, or open settings if there is none.
 (defn- on-action-clicked [tab]
-  (.then (open-popover tab)
+  (.then (open-note tab)
          #(when-not % (.openOptionsPage js/chrome.runtime))))
 
 (defn- on-installed [^js details]

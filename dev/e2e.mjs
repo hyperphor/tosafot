@@ -128,15 +128,15 @@ try {
     getSelection().addRange(r);
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
   });
-  const openPopover = async () => {
+  const openNote = async () => {
     await select();
     await waitFor('.toolbar');
     if (process.env.SHOT_BUBBLE && !shotBubble) { shotBubble = true; await page.screenshot({ path: process.env.SHOT_BUBBLE }); }
     await (await $('.toolbar .item.ask')).click();
-    await waitFor('.popover textarea');
-    if (process.env.SHOT_POPOVER && !shotPopover) { shotPopover = true; await page.screenshot({ path: process.env.SHOT_POPOVER }); }
+    await waitFor('.note .composer textarea');
+    if (process.env.SHOT_EMPTY && !shotEmpty) { shotEmpty = true; await page.screenshot({ path: process.env.SHOT_EMPTY }); }
   };
-  let shotBubble = false, shotPopover = false;
+  let shotBubble = false, shotEmpty = false;
   // Submit text from whichever textarea has focus. mod=true sends Cmd+Enter (comment).
   const submit = async (text, mod = false) => {
     await page.keyboard.type(text);
@@ -161,7 +161,7 @@ try {
   const closeNote = async () => (await $('.note-head button.close')).click();
 
   // First ask
-  await openPopover();
+  await openNote();
   await submit('What is this?');
   await waitFor('.turn.llm .text', 'proofs to programs');
   await lastLlmDone();
@@ -252,7 +252,7 @@ try {
 
   // Closing mid-stream aborts the request
   aborted = false;
-  await openPopover();
+  await openNote();
   await submit('slow');
   await waitFor('.turn.llm .text', 'tick');
   await closeNote();
@@ -261,34 +261,41 @@ try {
 
   // A note can start as a comment, with no LLM call
   const before = requests.length;
-  await openPopover();
+  await openNote();
   await submit('Remember to check the HoTT book', true);
   await waitFor('.turn.comment .text', 'HoTT book');
   ts = await turns();
-  check('popover comment starts a note without calling the LLM',
+  check('Cmd+Enter in a new note comments without calling the LLM',
         ts.length === 1 && requests.length === before, JSON.stringify(ts));
   await closeNote();
 
-  // Esc closes the popover even with focus in its textarea
-  await openPopover();
+  // Esc dismisses a note that was opened but not used, even with focus in its textarea
+  await openNote();
+  check('Ask… opens an empty note with its composer focused',
+        (await turns()).length === 0 && await page.evaluate(() =>
+          document.querySelector('tosafot-host').shadowRoot.activeElement?.tagName === 'TEXTAREA'));
   await page.keyboard.press('Escape');
-  check('Esc closes the popover', !(await has('.popover')));
+  check('Esc dismisses an unused note', !(await has('.note')));
+  check('...and its highlight', (await page.evaluate(() => CSS.highlights.get('tosafot')?.size)) === 0);
+  await openNote();
+  await page.mouse.click(1000, 700);
+  check('clicking elsewhere dismisses an unused note', !(await has('.note')));
 
-  // Keyboard-command path: background -> content "open-popover"
+  // Keyboard-command path: background -> content "open-note"
   await select();
   await page.bringToFront();
   const sendOpen = () => sw.evaluate(async () => {
     const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return chrome.tabs.sendMessage(t.id, { type: 'open-popover' });
+    return chrome.tabs.sendMessage(t.id, { type: 'open-note' });
   });
   const opened = await sendOpen();
-  check('open-popover message opens the popover',
-        await waitFor('.popover', null, 3000).then(() => true, () => false));
-  check('open-popover replies true with a selection', opened === true);
+  check('open-note message opens a note',
+        await waitFor('.note .composer textarea', null, 3000).then(() => true, () => false));
+  check('open-note replies true with a selection', opened === true);
   await page.keyboard.press('Escape');
   await page.evaluate(() => getSelection().removeAllRanges());
-  check('open-popover replies false without a selection',
-        (await sendOpen()) === false && !(await has('.popover')));
+  check('open-note replies false without a selection',
+        (await sendOpen()) === false && !(await has('.note')));
 
   // Selection toolbar and configurable actions
   await sw.evaluate(async () => {
@@ -322,7 +329,7 @@ try {
         && menuItems.at(-1) === 'Edit actions…', JSON.stringify(menuItems));
   await (await $('.toolbar .menu .item.action')).click();
   await waitFor('.note');
-  check('a menu action opens a note directly, without the popover', !(await has('.popover')) && !(await has('.toolbar')));
+  check('a menu action opens a note and asks', (await has('.note')) && !(await has('.toolbar')));
   await lastLlmDone();
   const actReq = requests.at(-1).body.messages.at(-1).content;
   check('action instructions are sent to the model', actReq.endsWith('Do mine.\n<instructions>SECRET-INSTR</instructions>'), actReq);
@@ -347,19 +354,31 @@ try {
   await select();
   await waitFor('.toolbar');
   await (await $('.toolbar .item.comment')).click();
-  await waitFor('.popover textarea');
-  check('Comment opens the popover in comment mode, without presets',
-        (await texts('.popover .actions button.primary'))[0] === 'Comment' && !(await has('.popover .presets')));
+  await waitFor('.note .composer textarea');
+  check('Comment opens an empty note in comment mode',
+        (await page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
+          .querySelector('.note .composer textarea').placeholder)) === 'Write a comment…');
   await submit('Toolbar comment');
   await waitFor('.turn.comment .text', 'Toolbar comment');
   check('Enter in comment mode comments without calling the LLM', requests.length === nreq);
+  await follow('Then a question');
+  await lastLlmDone();
+  check('after the first comment, Enter asks again', requests.length === nreq + 1);
   await (await $('.note-head button.delete')).click();
-  check('popover presets come from enabled actions',
-        await (async () => { await openPopover(); const b = await texts('.popover .presets button');
-                             await page.keyboard.press('Escape'); return b[0] === 'Explain' && b[1] === 'Mine' && !b.includes('Argue'); })());
+
+  await openNote();
+  const starters = await texts('.note .starters button');
+  check('an empty note offers enabled actions as starters',
+        starters[0] === 'Explain' && starters[1] === 'Mine' && !starters.includes('Argue'), JSON.stringify(starters));
+  nreq = requests.length;
+  await (await $('.note .starters button')).click();
+  await lastLlmDone();
+  check('a starter asks its question and then disappears', requests.length === nreq + 1 &&
+        requests.at(-1).body.messages.at(-1).content.endsWith('Explain this.') && !(await has('.note .starters')));
+  await closeNote();
 
   // Refusal is reported and excluded from later history
-  await openPopover();
+  await openNote();
   await submit('refuse');
   check('refusal is reported',
         await waitFor('.turn.llm .status', 'declined').then(() => true, () => false));
@@ -390,7 +409,7 @@ try {
   };
   const persistUrl = `${base}/page?persist`;
   await page.goto(persistUrl);
-  await openPopover();
+  await openNote();
   await submit('What is this?');
   await waitFor('.turn.llm .text', 'proofs to programs');
   await lastLlmDone();
@@ -456,7 +475,7 @@ try {
 
   // Comments save automatically; notes still anchor when the page renders their text late
   await page.goto(`${base}/page?late`);
-  await openPopover();
+  await openNote();
   await submit('Check against the HoTT book', true);
   await waitFor('.turn.comment .text', 'HoTT book');
   check('commenting saves the note',
@@ -472,7 +491,7 @@ try {
 
   // Missing key -> settings prompt
   await setProvider('');
-  await openPopover();
+  await openNote();
   await submit('Explain');
   check('missing key shows settings prompt',
         await waitFor('.turn.llm .status.error', 'Open settings').then(() => true, () => false));

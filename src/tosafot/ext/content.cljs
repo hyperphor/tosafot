@@ -1,5 +1,5 @@
 (ns tosafot.ext.content
-  "Content script: selection capture, popover, sidenotes, and saved notes on revisit."
+  "Content script: selection capture, toolbar, sidenotes, and saved notes on revisit."
   (:require [clojure.string :as str]
             [hyperphor.tunamelt.codec :as codec]
             [tosafot.anchor :as anchor]
@@ -7,14 +7,13 @@
             [tosafot.core :as core]
             [tosafot.ui :as ui]))
 
-;; :host/:root are the shadow host and root; :bubble/:popover are transient elements;
-;; :pending is the selection snapshot the popover is for.
+;; :host/:root are the shadow host and root; :bubble is the transient selection toolbar.
 ;; :notes maps id -> {:annotation :range (nil for orphans) :el (when open) :port :streaming}.
 ;; Unsaved notes exist only while open; saved ones stay registered when closed.
 (defonce state (atom {:notes {} :show-bubble? true :actions core/builtin-actions}))
 
 ;;; Highlights (CSS Custom Highlight API; leaves page DOM untouched).
-;;; "active" marks open notes and the pending selection; "saved" marks closed saved notes.
+;;; "active" marks open notes; "saved" marks closed saved notes.
 
 (def ^:private hl-styles
   {"tosafot"       "background-color: rgba(250, 200, 40, .38);"
@@ -169,12 +168,7 @@
   (some-> (get @state k) .remove)
   (swap! state dissoc k))
 
-(defn- close-popover! []
-  (remove-key! :bubble)
-  (remove-key! :popover)
-  (when-let [{:keys [range]} (:pending @state)]
-    (unhighlight! range))
-  (swap! state dissoc :pending))
+(defn- close-toolbar! [] (remove-key! :bubble))
 
 ;;; Storage (via the service worker)
 
@@ -350,8 +344,9 @@
      :y (+ js/window.scrollY 60)}))
 
 (defn- open-note!
-  "Show the sidenote for registered note `id`, or bring it to the front if it's open."
-  [id]
+  "Show the sidenote for registered note `id`, or bring it to the front if it's open.
+  `mode` :comment makes Enter comment in a new note's composer."
+  [id & [mode]]
   (when-let [{:keys [el annotation range] :as n} (note id)]
     (if el
       (.append (root) el)
@@ -363,6 +358,9 @@
                                    :on-ask #(ask! id %)
                                    :on-comment #(comment! id %)
                                    :on-stop #(stop! id)
+                                   :mode mode
+                                   :actions (:actions @state)
+                                   :on-action (fn [{:keys [prompt instructions]}] (ask! id prompt instructions))
                                    :on-copy #(js/navigator.clipboard.writeText
                                               (core/thread->markdown (:annotation (note id))))))]
         (ui/render-thread! el (:annotation/thread annotation))
@@ -374,13 +372,23 @@
 (defn- new-note!
   "Register and open a note for selection `snap`; return its id."
   [snap kind]
-  (close-popover!)
+  (close-toolbar!)
   (let [ann (core/new-annotation {:url js/location.href :title js/document.title
                                   :target (:target snap) :kind kind})
         id (str (:annotation/id ann))]
     (swap! state assoc-in [:notes id] {:annotation ann :range (:range snap)})
-    (open-note! id)
+    (open-note! id kind)
     id))
+
+(defn- open-empty-note!
+  "Start a note on `snap` with nothing in it yet and focus its composer."
+  [snap kind]
+  (let [id (new-note! snap kind)]
+    (some-> (:el (note id)) (.querySelector "textarea") .focus)
+    id))
+
+(defn- empty-unsaved? [{:keys [annotation]}]
+  (and (empty? (:annotation/thread annotation)) (not (:annotation/saved? annotation))))
 
 ;;; Saved notes on load
 
@@ -426,33 +434,17 @@
                  (watch-for-orphans!))))
       (.catch #(js/console.error "Tosafot: loading saved notes failed" %))))
 
-;;; Popover
-
-(defn- open-popover!
-  "Open the question box on `snap`; `mode` :comment makes commenting the default."
-  [snap & [mode]]
-  (close-popover!)
-  (let [el (ui/popover (assoc (end-pos (:range snap))
-                              :quote (:text snap)
-                              :mode mode
-                              :actions (:actions @state)
-                              :on-ask #(ask! (new-note! snap :ask) %1 %2)
-                              :on-comment #(comment! (new-note! snap :comment) %)))]
-    (highlight! (:range snap))
-    (.append (root) el)
-    (ui/clamp-x! el)
-    (swap! state assoc :popover el :pending snap)
-    (.focus (.querySelector el "textarea"))))
+;;; Toolbar
 
 (defn- show-toolbar! [snap]
   (remove-key! :bubble)
   (let [el (ui/toolbar (assoc (end-pos (:range snap))
                               :actions (:actions @state)
-                              :on-ask #(open-popover! snap)
-                              :on-comment #(open-popover! snap :comment)
+                              :on-ask #(open-empty-note! snap :ask)
+                              :on-comment #(open-empty-note! snap :comment)
                               :on-action (fn [{:keys [prompt instructions]}]
                                            (ask! (new-note! snap :ask) prompt instructions))
-                              :on-edit #(do (close-popover!)
+                              :on-edit #(do (close-toolbar!)
                                             (js/chrome.runtime.sendMessage #js {:type "open-options"}))))]
     (.append (root) el)
     (ui/clamp-x! el)
@@ -481,9 +473,16 @@
                          ffirst)]
         (open-note! id)))))
 
+(defn- dismiss-unused!
+  "Close notes that were opened but never written in, like a popover would be."
+  []
+  (doseq [[id n] (:notes @state) :when (and (:el n) (empty-unsaved? n))]
+    (close-note! id)))
+
 (defn- on-mousedown [e]
   (when-not (from-host? e)
-    (close-popover!)))
+    (close-toolbar!)
+    (dismiss-unused!)))
 
 (defn- on-mouseup [e]
   (when (and (not (from-host? e)) (:show-bubble? @state))
@@ -492,14 +491,15 @@
 
 (defn- on-keydown [^js e]
   (when (= "Escape" (.-key e))
-    (close-popover!)))
+    (close-toolbar!)
+    (dismiss-unused!)))
 
 (defn- on-runtime-message
-  "Handles \"open-popover\"; replies whether there was a selection to open it on."
+  "Handles \"open-note\"; replies whether there was a selection to open one on."
   [^js msg _sender respond]
-  (when (= "open-popover" (.-type msg))
+  (when (= "open-note" (.-type msg))
     (let [snap (snapshot)]
-      (when snap (open-popover! snap))
+      (when snap (open-empty-note! snap :ask))
       (respond (boolean snap))))
   false)
 

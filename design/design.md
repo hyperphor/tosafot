@@ -51,7 +51,7 @@ Everything runs in the browser. There is no backend.
 ```
 ┌──────────────── page ────────────────┐
 │ content script                       │
-│  - selection toolbar + "Ask" popover │
+│  - selection toolbar                 │
 │  - anchoring / highlight rendering   │
 │  - sidenote / thread UI (shadow DOM) │
 └──────────────┬───────────────────────┘
@@ -66,11 +66,11 @@ Everything runs in the browser. There is no backend.
 ```
 
 - **Manifest V3** extension. Chrome first, Firefox if it's cheap.
-- **Content script** captures the selection, shows a selection toolbar and the Ask popover (preset prompts plus a free-text box), and renders highlights and threads. The UI lives in a shadow root so page CSS doesn't interfere.
+- **Content script** captures the selection, shows a selection toolbar, and renders highlights and threads. The UI lives in a shadow root so page CSS doesn't interfere.
 
 ### Selection toolbar and actions
 
-Selecting text shows a toolbar: the icon, **Comment** and **Ask…** (both open the popover; Comment makes commenting the default), the actions placed on the toolbar, and **⋯** for the rest plus "Edit actions…". Running an action skips the popover and starts a note.
+Selecting text shows a toolbar: the icon, **Comment** and **Ask…**, the actions placed on the toolbar, and **⋯** for the rest plus "Edit actions…". There is no separate question box: Comment and Ask… open an empty sidenote with its composer focused (from Comment, Enter comments until the first submission), and an action starts a note with its question. An empty sidenote shows the enabled actions as starter buttons; one that is closed, dismissed with Esc, or abandoned by clicking elsewhere while still empty and unsaved is discarded.
 
 An action is `{:id :label :prompt :instructions :place}`, with `:place` one of `"toolbar"`, `"menu"`, `"off"`; list order is display order. `:prompt` is the question shown in the thread; `:instructions` are stored on the message as `:msg/instructions` and sent inside `<instructions>` tags in that user turn, so they survive follow-ups and saving. Built-ins can be edited, reordered, turned off, or reset, but not deleted; on load, built-ins missing from the stored list are appended at their default place, so new ones show up after upgrades. Custom actions get a uuid id.
 
@@ -138,7 +138,7 @@ Reuse hyperphor libraries where it makes sense. Some will need porting to cljc, 
 - `tosafot.core` (cljc): data model, thread operations, prompt construction, storage protocol.
 - `tosafot.llm`: provider adapters and streaming.
 - `tosafot.anchor`: selector creation and re-anchoring (browser only).
-- `tosafot.ui`: popover, highlight, and sidenote/thread components.
+- `tosafot.ui`: selection toolbar and sidenote/thread components.
 - The extension shell wires these together. ThirdMind and Logseq integrations reuse core, llm, and ui.
 
 ## Milestones

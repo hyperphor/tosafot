@@ -97,7 +97,7 @@
    [:legend "Actions"]
    [:p {:class "help"} "Each action has a name, the question it asks (shown in the thread), and optional "
     "extra instructions sent to the model. Show it on the toolbar that appears when you select text, "
-    "under its ⋯ menu, or not at all; shown actions also appear in the Ask box."]
+    "under its ⋯ menu, or not at all; shown actions also appear in a new, empty note."]
    (map-indexed action-row actions)
    [:div {:class "actions"}
     [:button {:on-click #(do (swap! settings update :actions conj
@@ -125,7 +125,7 @@
       [:label {:class "inline"}
        [:input {:type "checkbox" :checked show-bubble?
                 :on-change #(swap! settings assoc :show-bubble? (.. % -target -checked))}]
-       "Show the toolbar when text is selected (Alt+Shift+A opens the Ask box either way)"]
+       "Show the toolbar when text is selected (Alt+Shift+A opens a note either way)"]
       (field "Extra system prompt"
              [:textarea {:value system-prompt
                          :on-input #(swap! settings assoc :system-prompt (.. % -target -value))}])]

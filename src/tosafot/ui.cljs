@@ -1,5 +1,5 @@
 (ns tosafot.ui
-  "Popover and sidenote components. Rendered inside a shadow root; positions are document coords."
+  "Selection toolbar and sidenote components. Rendered inside a shadow root; positions are document coords."
   (:require ["dompurify" :as DOMPurify]
             ["marked" :refer [marked]]
             [clojure.string :as str]
@@ -26,13 +26,11 @@
 .menu .item { display: block; padding: 7px 9px; }
 .menu hr { border: none; border-top: 1px solid #eee; margin: 4px 2px; }
 .menu .dim { color: #888; }
-.brand { display: flex; align-items: center; gap: 5px; margin: -1px 0 7px; color: #6a5acd;
-         font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+
 .bubble:hover { background: #f3f0ff; }
-.popover { width: 320px; padding: 8px; }
 .quote { color: #666; font-style: italic; border-left: 3px solid #e3c35a; padding: 1px 0 1px 7px;
          margin: 0 0 7px; max-height: 4.4em; overflow: hidden; }
-.presets { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.starters { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 4px; }
 button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid #ccc; border-radius: 5px;
          background: #f7f7f9; color: inherit; cursor: pointer; }
 button:hover { background: #ecebf5; }
@@ -42,7 +40,6 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
            border: 1px solid #ccc; border-radius: 5px; background: #fff; color: inherit; }
 .actions { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
 .actions .spacer { flex: 1; }
-.hint { color: #999; font-size: 11px; margin-top: 3px; }
 .note { width: 360px; max-height: 75vh; display: flex; flex-direction: column; }
 .note-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: move;
              border-bottom: 1px solid #eee; color: #777; font-size: 11px; user-select: none; }
@@ -85,7 +82,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   .note-head, .composer, .orphans ul { border-color: #3a3a3e; }
   .orphans li:hover { background: #34343a; }
   .turn.comment .text { background: #3a3424; }
-  .brand, .note-head .title { color: #b3a8f5; }
+  .note-head .title { color: #b3a8f5; }
   .text pre { background: #2c2c30; }
 }
 ")
@@ -147,8 +144,6 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
             :on-click #(let [t (str/trim (.-value ta))] (when (seq t) (f t)))}
    label])
 
-(def ^:private hint "Enter to ask · ⌘/Ctrl+Enter to comment · Shift+Enter for newline")
-(def ^:private comment-hint "Enter to comment · ⌘/Ctrl+Enter to ask · Shift+Enter for newline")
 
 (defn- item
   "Toolbar/menu entry. mousedown is cancelled so the page selection survives the click."
@@ -160,7 +155,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 
 (defn toolbar
   "Selection toolbar: Comment, Ask…, the \"toolbar\" actions, and ⋯ for the \"menu\" ones.
-  (on-action action) runs a preset; on-ask / on-comment open the popover."
+  (on-action action) runs a preset; on-ask / on-comment open an empty note."
   [{:keys [actions on-ask on-comment on-action on-edit] :as pos}]
   (let [menu (h [:div {:class "menu" :style "display:none"}
                  (for [a (core/actions-at actions "menu")]
@@ -193,33 +188,6 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
       (set! (.. el -style -left) (px (max js/window.scrollX max-x))))
     el))
 
-(defn popover
-  "Question box for a selection. Calls (on-ask text instructions?) or (on-comment text).
-  `mode` :comment makes commenting the default."
-  [{:keys [quote actions on-ask on-comment mode] :as pos}]
-  (let [comment? (= mode :comment)
-        ta (h [:textarea {:placeholder (if comment? "Write a comment…" "Ask about this, or write a comment…")}])
-        el (h [:div {:class "sd popover"}
-               [:div {:class "brand"} (logo 16) "Tosafot"]
-               [:div {:class "quote"} (short-quote quote 160)]
-               (when-not comment?
-                 [:div {:class "presets"}
-                  (for [{:keys [label prompt instructions]} (core/actions-at actions "toolbar" "menu")]
-                    [:button {:title prompt :on-click #(on-ask prompt instructions)} label])])
-               ta
-               [:div {:class "actions"}
-                (if comment?
-                  (list (submit-button "Comment" ta on-comment "primary")
-                        (submit-button "Ask" ta on-ask))
-                  (list (submit-button "Ask" ta on-ask "primary")
-                        (submit-button "Comment" ta on-comment)))]
-               [:div {:class "hint"} (str (if comment? comment-hint hint) " · Esc to close")]])]
-    (if comment?
-      (composer-keys! ta on-comment on-ask)
-      (composer-keys! ta on-ask on-comment))
-    (isolate-keys! el)
-    (at el pos)))
-
 (defn- draggable! [^js el ^js handle]
   (.addEventListener
    handle "mousedown"
@@ -237,13 +205,18 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
-  [{:keys [quote on-close on-copy on-ask on-comment on-stop on-save on-delete] :as pos}]
-  (let [ta (h [:textarea {:placeholder "Follow up, or comment…"}])
+  [{:keys [quote on-close on-copy on-ask on-comment on-stop on-save on-delete
+           actions on-action mode] :as pos}]
+  (let [comment-first (atom (= mode :comment))
+        ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
         ask-btn (atom nil)
+        settle! #(do (reset! comment-first false)
+                     (set! (.-value ta) "")
+                     (set! (.-placeholder ta) "Follow up, or comment…"))
         ask (fn [t] (when-not (.-disabled @ask-btn)
-                      (set! (.-value ta) "")
+                      (settle!)
                       (on-ask t)))
-        comment (fn [t] (set! (.-value ta) "") (on-comment t))
+        comment (fn [t] (settle!) (on-comment t))
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
                 (logo 14)
@@ -254,6 +227,10 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
                 [:button {:class "close" :title "Close" :on-click on-close} "×"]]
                [:div {:class "note-body"}
                 [:div {:class "quote"} (short-quote quote 200)]
+                (when-let [as (seq (core/actions-at actions "toolbar" "menu"))]
+                  [:div {:class "starters"}
+                   (for [a as]
+                     [:button {:title (:prompt a) :on-click #(on-action a)} (:label a)])])
                 [:div {:class "thread"}]]
                [:div {:class "composer"}
                 ta
@@ -264,7 +241,8 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
                  [:span {:class "spacer"}]
                  [:button {:title "Copy thread as Markdown" :on-click on-copy} "Copy"]]]])]
     (reset! ask-btn (qs el "button.ask"))
-    (composer-keys! ta ask comment)
+    ;; Started from Comment, Enter comments until the first submission.
+    (composer-keys! ta #(if @comment-first (comment %) (ask %)) #(if @comment-first (ask %) (comment %)))
     (isolate-keys! el)
     (draggable! el (qs el ".note-head"))
     (at el pos)))
@@ -305,6 +283,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 (defn append-turn!
   "Add a thread message to the note."
   [^js note {:msg/keys [id author kind text created]}]
+  (some-> (qs note ".starters") .remove)
   (let [human? (= :human (:type author))
         who (cond (= kind :comment) "Note"
                   human? "You"
