@@ -217,7 +217,7 @@ try {
   // Copy puts the thread on the clipboard as Markdown
   const ctx = browser.defaultBrowserContext();
   await ctx.overridePermissions(base, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
-  await (await $('.composer .share-btn')).click();
+  await (await $('.note-head .share-btn')).click();
   await (await $('.share .menu button[title^="Copy"]')).click();
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   check('copy exports the thread as Markdown',
@@ -228,11 +228,11 @@ try {
     .shadowRoot.querySelector('.share .menu').style.display === 'none'));
 
   // Post to Bluesky opens its compose page with the note, quote, and a deep link
-  await (await $('.composer .share-btn')).click();
+  await (await $('.note-head .share-btn')).click();
   if (process.env.SHOT_SHARE) await page.screenshot({ path: process.env.SHOT_SHARE });
   const [bsky] = await Promise.all([
     browser.waitForTarget(t => t.url().startsWith('https://bsky.app/intent/compose'), { timeout: 5000 }),
-    (await $('.composer .share button[title*="Bluesky"]')).click(),
+    (await $('.share .menu button[title*="Bluesky"]')).click(),
   ]);
   const post = new URL(bsky.url()).searchParams.get('text');
   check('bluesky post has note, quote, and text-fragment link',
