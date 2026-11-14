@@ -1,4 +1,4 @@
-(ns snapdragon.core
+(ns tosafot.core
   "Annotation data model, threads, and prompt construction. Platform-neutral."
   (:require [clojure.string :as str]))
 
@@ -7,6 +7,7 @@
 (defn- parse-inst [s]
   #?(:clj (java.util.Date/from (java.time.Instant/parse s)) :cljs (js/Date. s)))
 
+;; Old name, kept: saved annotations' URIs include it.
 (def realm "snapdragon")
 
 (defn annotation-uri [id] (str "hyperphor://" realm "/annotation/" id))

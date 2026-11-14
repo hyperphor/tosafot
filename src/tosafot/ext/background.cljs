@@ -1,11 +1,11 @@
-(ns snapdragon.ext.background
+(ns tosafot.ext.background
   "Service worker: runs LLM requests for content scripts over a port."
   (:require [clojure.string :as str]
             [hyperphor.tunamelt.codec :as codec]
             [hyperphor.tunamelt.core :as tm]
-            [snapdragon.config :as config]
-            [snapdragon.core :as core]
-            [snapdragon.llm :as llm]))
+            [tosafot.config :as config]
+            [tosafot.core :as core]
+            [tosafot.llm :as llm]))
 
 (defn- post! [^js port m]
   ;; The port may already be gone if the sidenote was closed.
@@ -18,7 +18,7 @@
          (let [{:keys [api-key model api] :as provider} (config/active-provider settings)]
            (if (and (= api "anthropic") (str/blank? api-key))
              (post! port {:type "error" :needs-config true
-                          :message "No API key set. Add one in Snapdragon settings."})
+                          :message "No API key set. Add one in Tosafot settings."})
              (let [prompt (core/build-prompt (assoc req :extra-system (:system-prompt settings)))]
                (post! port {:type "meta" :provider (:name provider) :model model})
                (llm/stream! provider prompt
@@ -32,7 +32,7 @@
                   (post! port {:type "error" :message (.-message e)}))))))
 
 (defn- on-connect [^js port]
-  (when (= "snapdragon/ask" (.-name port))
+  (when (= "tosafot/ask" (.-name port))
     (let [ctrl (js/AbortController.)]
       (.addListener (.-onDisconnect port) #(.abort ctrl))
       (.addListener (.-onMessage port)
@@ -57,7 +57,7 @@
       (do (-> p
               (.then #(respond #js {:ok true :value %}))
               (.catch (fn [^js e]
-                        (js/console.error "snapdragon store" e)
+                        (js/console.error "tosafot store" e)
                         (respond #js {:ok false :error (.-message e)}))))
           ;; Keep the channel open for the async reply.
           true)
@@ -65,21 +65,32 @@
             (.openOptionsPage js/chrome.runtime))
           false))))
 
+(defn- open-popover
+  "Ask the tab's content script to open the popover; Promise of whether it did."
+  [^js tab]
+  (-> (.sendMessage js/chrome.tabs (.-id tab) #js {:type "open-popover"})
+      (.then boolean)
+      (.catch (constantly false))))
+
 (defn- on-command [cmd]
   (when (= cmd "ask-selection")
     (-> (.query js/chrome.tabs #js {:active true :currentWindow true})
-        (.then (fn [^js tabs]
-                 (when-let [tab (aget tabs 0)]
-                   (-> (.sendMessage js/chrome.tabs (.-id tab) #js {:type "open-popover"})
-                       (.catch (fn [_] nil)))))))))
+        (.then (fn [^js tabs] (some-> (aget tabs 0) open-popover))))))
+
+;; Toolbar button: ask about the selection, or open settings if there is none.
+(defn- on-action-clicked [tab]
+  (.then (open-popover tab)
+         #(when-not % (.openOptionsPage js/chrome.runtime))))
 
 (defn- on-installed [^js details]
   (when (= "install" (.-reason details))
     (.openOptionsPage js/chrome.runtime)))
 
 (defn init []
+  ;; IndexedDB name from the old name; kept so saved notes survive.
   (tm/configure! {:store "snapdragon" :realm core/realm})
   (.addListener js/chrome.runtime.onConnect on-connect)
   (.addListener js/chrome.runtime.onMessage on-message)
   (.addListener js/chrome.runtime.onInstalled on-installed)
-  (.addListener js/chrome.commands.onCommand on-command))
+  (.addListener js/chrome.commands.onCommand on-command)
+  (.addListener js/chrome.action.onClicked on-action-clicked))

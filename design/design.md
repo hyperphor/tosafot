@@ -1,4 +1,6 @@
-# Snapdragon — Design
+# Tosafot — Design
+
+(Formerly "Snapdragon"; renamed to avoid the Qualcomm chip brand. Stored data still uses the old name: IndexedDB database and realm `snapdragon`, settings key `snapdragon/settings`.)
 
 ## Summary
 
@@ -32,7 +34,7 @@ It's for my own use first. A social or shared version would be easy to add and g
 
 ### Learning from a technical web text
 
-The motivating case. I'm working through a Lean tutorial and currently paste chunks into Logseq so I can run `/AskClaude` on them. Snapdragon removes that step. Most answers are throwaway, so ephemeral should be the default and saving should be one click.
+The motivating case. I'm working through a Lean tutorial and currently paste chunks into Logseq so I can run `/AskClaude` on them. Tosafot removes that step. Most answers are throwaway, so ephemeral should be the default and saving should be one click.
 
 ### Commenting on web pages
 
@@ -125,10 +127,10 @@ Reuse hyperphor libraries where it makes sense. Some will need porting to cljc, 
 
 ### Library split
 
-- `snapdragon.core` (cljc): data model, thread operations, prompt construction, storage protocol.
-- `snapdragon.llm`: provider adapters and streaming.
-- `snapdragon.anchor`: selector creation and re-anchoring (browser only).
-- `snapdragon.ui`: popover, highlight, and sidenote/thread components.
+- `tosafot.core` (cljc): data model, thread operations, prompt construction, storage protocol.
+- `tosafot.llm`: provider adapters and streaming.
+- `tosafot.anchor`: selector creation and re-anchoring (browser only).
+- `tosafot.ui`: popover, highlight, and sidenote/thread components.
 - The extension shell wires these together. ThirdMind and Logseq integrations reuse core, llm, and ui.
 
 ## Milestones

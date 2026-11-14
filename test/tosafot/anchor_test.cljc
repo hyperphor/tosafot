@@ -1,6 +1,6 @@
-(ns snapdragon.anchor-test
+(ns tosafot.anchor-test
   (:require [clojure.test :refer [deftest is testing]]
-            [snapdragon.anchor :as a]))
+            [tosafot.anchor :as a]))
 
 (def text "The cat sat. Then the cat ran. Finally the cat slept.")
 

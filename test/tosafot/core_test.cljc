@@ -1,8 +1,8 @@
-(ns snapdragon.core-test
+(ns tosafot.core-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [hyperphor.tunamelt.codec :as codec]
-            [snapdragon.core :as core]))
+            [tosafot.core :as core]))
 
 (def llm {:type :llm :provider "Anthropic" :model "m"})
 

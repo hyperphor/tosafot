@@ -5,3 +5,4 @@ out/
 ext/js/
 .nrepl-port
 .#*
+dist/

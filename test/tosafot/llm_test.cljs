@@ -1,6 +1,6 @@
-(ns snapdragon.llm-test
+(ns tosafot.llm-test
   (:require [clojure.test :refer [deftest is]]
-            [snapdragon.llm :as llm]))
+            [tosafot.llm :as llm]))
 
 (deftest split-events-test
   (is (= [["a" "b"] "data: c"] (llm/split-events "data: a\n\nevent: x\ndata: b\n\ndata: c" false)))

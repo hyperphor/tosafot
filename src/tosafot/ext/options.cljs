@@ -1,7 +1,7 @@
-(ns snapdragon.ext.options
+(ns tosafot.ext.options
   "Options page: provider list and general settings."
-  (:require [snapdragon.config :as config]
-            [snapdragon.dom :refer [h]]))
+  (:require [tosafot.config :as config]
+            [tosafot.dom :refer [h]]))
 
 (defonce settings (atom nil))
 (defonce status (atom nil))

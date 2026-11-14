@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
-const extPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../ext');
+const extPath = path.resolve(process.env.EXT_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../ext'));
 const requests = [];
 let aborted = false;
 
@@ -112,11 +112,11 @@ try {
 
   // Helpers: everything in the extension UI lives in an open shadow root.
   const $ = sel => page.evaluateHandle(
-    s => document.querySelector('snapdragon-host')?.shadowRoot?.querySelector(s), sel);
+    s => document.querySelector('tosafot-host')?.shadowRoot?.querySelector(s), sel);
   const has = sel => page.evaluate(
-    s => !!document.querySelector('snapdragon-host')?.shadowRoot?.querySelector(s), sel);
+    s => !!document.querySelector('tosafot-host')?.shadowRoot?.querySelector(s), sel);
   const waitFor = (sel, text, timeout = 10000) => page.waitForFunction((s, t) => {
-    const el = document.querySelector('snapdragon-host')?.shadowRoot?.querySelector(s);
+    const el = document.querySelector('tosafot-host')?.shadowRoot?.querySelector(s);
     return el && (!t || el.textContent.includes(t));
   }, { timeout }, sel, text);
   const select = () => page.evaluate(() => {
@@ -146,12 +146,12 @@ try {
     await submit(text, mod);
   };
   const turns = () => page.evaluate(() =>
-    [...document.querySelector('snapdragon-host').shadowRoot.querySelectorAll('.note .turn')].map(t => ({
+    [...document.querySelector('tosafot-host').shadowRoot.querySelectorAll('.note .turn')].map(t => ({
       cls: t.className, meta: t.querySelector('.meta').textContent,
       html: t.querySelector('.text').innerHTML, status: t.querySelector('.status').textContent,
     })));
   const lastLlmDone = () => page.waitForFunction(() => {
-    const n = document.querySelector('snapdragon-host').shadowRoot.querySelector('.note');
+    const n = document.querySelector('tosafot-host').shadowRoot.querySelector('.note');
     const ts = n?.querySelectorAll('.turn.llm');
     return ts?.length && n.querySelector('button.ask') && !n.querySelector('button.ask').disabled;
   }, { timeout: 10000 });
@@ -170,11 +170,11 @@ try {
   check('answer labelled with model', ts[1].meta.startsWith('claude-opus-5-5 · '), ts[1].meta);
   check('status cleared after completion', ts[1].status === '', ts[1].status);
   const placed = await page.evaluate(() => {
-    const n = document.querySelector('snapdragon-host').shadowRoot.querySelector('.note');
+    const n = document.querySelector('tosafot-host').shadowRoot.querySelector('.note');
     return n.getBoundingClientRect().left > document.querySelector('#target').getBoundingClientRect().right;
   });
   check('note placed in the right margin', placed);
-  check('selection highlighted', (await page.evaluate(() => CSS.highlights.get('snapdragon')?.size)) === 1);
+  check('selection highlighted', (await page.evaluate(() => CSS.highlights.get('tosafot')?.size)) === 1);
 
   let req = requests.at(-1);
   check('sends API key and browser-access header',
@@ -195,7 +195,7 @@ try {
   check('comment is labelled as a note', (await turns()).at(-1).meta.startsWith('Note · '));
   await follow('Who named it?');
   await page.waitForFunction(n => {
-    const ts = document.querySelector('snapdragon-host').shadowRoot.querySelectorAll('.turn.llm');
+    const ts = document.querySelector('tosafot-host').shadowRoot.querySelectorAll('.turn.llm');
     return ts.length === 2 && ts[1].textContent.includes('proofs to programs');
   }, { timeout: 10000 }, n);
   await lastLlmDone();
@@ -208,7 +208,7 @@ try {
   check('comment is merged into the follow-up as a note',
         msgs[2].content === '[note] I think this is about Lean specifically\n\nWho named it?', msgs[2].content);
   check('composer is cleared after submit',
-        (await page.evaluate(() => document.querySelector('snapdragon-host').shadowRoot
+        (await page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
           .querySelector('.note .composer textarea').value)) === '');
 
   // Copy puts the thread on the clipboard as Markdown
@@ -226,13 +226,13 @@ try {
   await follow('slow');
   await waitFor('.turn.llm:last-child .text', 'tick');
   check('Ask is disabled while streaming', await page.evaluate(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelector('.note button.ask').disabled));
+    document.querySelector('tosafot-host').shadowRoot.querySelector('.note button.ask').disabled));
   const nTurns = (await turns()).length;
   await follow('typed while busy');
-  const kept = await page.evaluate(() => document.querySelector('snapdragon-host').shadowRoot
+  const kept = await page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
     .querySelector('.note .composer textarea').value);
   check('Enter while streaming keeps the typed text', kept === 'typed while busy' && (await turns()).length === nTurns, kept);
-  await page.evaluate(() => { document.querySelector('snapdragon-host').shadowRoot
+  await page.evaluate(() => { document.querySelector('tosafot-host').shadowRoot
     .querySelector('.note .composer textarea').value = ''; });
   await (await $('.note button.stop')).click();
   await new Promise(r => setTimeout(r, 500));
@@ -240,12 +240,12 @@ try {
   ts = await turns();
   check('stopped answer is kept and marked', ts.at(-1).status === 'Stopped.' && ts.at(-1).html.includes('tick'));
   check('Ask is re-enabled after stopping', await page.evaluate(() =>
-    !document.querySelector('snapdragon-host').shadowRoot.querySelector('.note button.ask').disabled));
+    !document.querySelector('tosafot-host').shadowRoot.querySelector('.note button.ask').disabled));
 
   // Close removes note and highlight
   await closeNote();
   check('close removes the note', !(await has('.note')));
-  check('close removes highlight', (await page.evaluate(() => CSS.highlights.get('snapdragon')?.size)) === 0);
+  check('close removes highlight', (await page.evaluate(() => CSS.highlights.get('tosafot')?.size)) === 0);
 
   // Closing mid-stream aborts the request
   aborted = false;
@@ -274,13 +274,18 @@ try {
   // Keyboard-command path: background -> content "open-popover"
   await select();
   await page.bringToFront();
-  await sw.evaluate(async () => {
+  const sendOpen = () => sw.evaluate(async () => {
     const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-    await chrome.tabs.sendMessage(t.id, { type: 'open-popover' });
+    return chrome.tabs.sendMessage(t.id, { type: 'open-popover' });
   });
+  const opened = await sendOpen();
   check('open-popover message opens the popover',
         await waitFor('.popover', null, 3000).then(() => true, () => false));
+  check('open-popover replies true with a selection', opened === true);
   await page.keyboard.press('Escape');
+  await page.evaluate(() => getSelection().removeAllRanges());
+  check('open-popover replies false without a selection',
+        (await sendOpen()) === false && !(await has('.popover')));
 
   // Refusal is reported and excluded from later history
   await openPopover();
@@ -295,9 +300,9 @@ try {
   await closeNote();
 
   // ---- Saved notes (milestone 3); a separate URL keeps them apart from the notes above
-  const savedSize = () => page.evaluate(() => CSS.highlights.get('snapdragon-saved')?.size ?? 0);
+  const savedSize = () => page.evaluate(() => CSS.highlights.get('tosafot-saved')?.size ?? 0);
   const savedText = () => page.evaluate(() =>
-    [...(CSS.highlights.get('snapdragon-saved') || [])].map(r => r.toString()));
+    [...(CSS.highlights.get('tosafot-saved') || [])].map(r => r.toString()));
   const reload = async () => {
     await page.reload();
     await page.waitForFunction(() => document.readyState === 'complete');
@@ -326,7 +331,7 @@ try {
   check('closing a saved note leaves a saved highlight', (await savedSize()) === 1);
 
   await reload();
-  await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 })
+  await page.waitForFunction(() => (CSS.highlights.get('tosafot-saved')?.size ?? 0) === 1, { timeout: 5000 })
     .catch(() => {});
   check('saved note is highlighted after reload', (await savedSize()) === 1);
   check('saved highlight covers the original text', (await savedText())[0] === 'Curry-Howard correspondence',
@@ -340,11 +345,11 @@ try {
         await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓'));
   await follow('Who named it?');
   await page.waitForFunction(() =>
-    document.querySelector('snapdragon-host').shadowRoot.querySelectorAll('.turn.llm').length === 2);
+    document.querySelector('tosafot-host').shadowRoot.querySelectorAll('.turn.llm').length === 2);
   await lastLlmDone();
   await closeNote();
   await reload();
-  await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 });
+  await page.waitForFunction(() => (CSS.highlights.get('tosafot-saved')?.size ?? 0) === 1, { timeout: 5000 });
   await clickTarget();
   await waitFor('.note', null, 3000);
   check('follow-up on a saved note persists', (await turns()).length === 4);
@@ -356,7 +361,7 @@ try {
 
   variant = 'shifted';
   await reload();
-  await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 })
+  await page.waitForFunction(() => (CSS.highlights.get('tosafot-saved')?.size ?? 0) === 1, { timeout: 5000 })
     .catch(() => {});
   check('note re-anchors after the text moves', JSON.stringify(await savedText()) === '["Curry-Howard correspondence"]',
         JSON.stringify(await savedText()));
@@ -364,7 +369,7 @@ try {
   variant = 'changed';
   await reload();
   check('note whose text is gone is listed as an orphan',
-        await waitFor('.orphans .badge', "1 Snapdragon note couldn't be placed", 5000).then(() => true, () => false));
+        await waitFor('.orphans .badge', "1 Tosafot note couldn't be placed", 5000).then(() => true, () => false));
   check('orphan is not highlighted', (await savedSize()) === 0);
   await (await $('.orphans .badge')).click();
   if (process.env.SHOT_ORPHANS) await page.screenshot({ path: process.env.SHOT_ORPHANS });
@@ -389,7 +394,7 @@ try {
   variant = 'late';
   await reload();
   check('late-rendered text: note placed once it appears',
-        await page.waitForFunction(() => (CSS.highlights.get('snapdragon-saved')?.size ?? 0) === 1, { timeout: 5000 })
+        await page.waitForFunction(() => (CSS.highlights.get('tosafot-saved')?.size ?? 0) === 1, { timeout: 5000 })
           .then(() => true, () => false));
   check('late-rendered text: no orphan badge left', !(await has('.orphans')));
   variant = 'normal';

@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Snapdragon",
-  "version": "0.1.0",
+  "name": "Tosafot",
+  "version": "0.3.0",
+  "minimum_chrome_version": "105",
   "description": "Select text on any page and ask an LLM about it.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["<all_urls>"],
@@ -11,8 +12,11 @@
      "js": ["js/content/content.js"],
      "run_at": "document_idle"}
   ],
+  "icons": {"16": "icons/icon16.png", "32": "icons/icon32.png",
+            "48": "icons/icon48.png", "128": "icons/icon128.png"},
   "options_page": "options.html",
-  "action": {"default_title": "Snapdragon"},
+  "action": {"default_title": "Ask Tosafot about the selection",
+             "default_icon": {"16": "icons/icon16.png", "32": "icons/icon32.png"}},
   "commands": {
     "ask-selection": {
       "suggested_key": {"default": "Alt+Shift+A"},

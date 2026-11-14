@@ -1,6 +1,7 @@
-(ns snapdragon.config
+(ns tosafot.config
   "Settings stored in chrome.storage.local.")
 
+;; Named for the extension's old name; kept so existing settings survive.
 (def ^:private storage-key "snapdragon/settings")
 
 (def api-styles

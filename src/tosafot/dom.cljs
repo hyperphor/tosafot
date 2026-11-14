@@ -1,4 +1,4 @@
-(ns snapdragon.dom
+(ns tosafot.dom
   "Minimal hiccup -> DOM element builder."
   (:require [clojure.string :as str]))
 

@@ -1,10 +1,10 @@
-(ns snapdragon.ui
+(ns tosafot.ui
   "Popover and sidenote components. Rendered inside a shadow root; positions are document coords."
   (:require ["dompurify" :as DOMPurify]
             ["marked" :refer [marked]]
             [clojure.string :as str]
-            [snapdragon.core :as core]
-            [snapdragon.dom :refer [h qs]]))
+            [tosafot.core :as core]
+            [tosafot.dom :refer [h qs]]))
 
 (def styles "
 :host { all: initial; }
@@ -159,7 +159,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
         comment (fn [t] (set! (.-value ta) "") (on-comment t))
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
-                [:span {:class "title"} "Snapdragon"]
+                [:span {:class "title"} "Tosafot"]
                 [:button {:class "save" :title "Keep this note on this page" :on-click on-save} "Save"]
                 [:button {:class "delete" :title "Delete this saved note" :on-click on-delete
                           :style "display:none"} "Delete"]
@@ -275,7 +275,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
                :title "The text these notes were attached to wasn't found on this page"
                :on-click #(set! (.. list-el -style -display)
                                 (if (= "none" (.. list-el -style -display)) "" "none"))}
-         (str "⚠ " n " Snapdragon note" (when (> n 1) "s") " couldn't be placed")]
+         (str "⚠ " n " Tosafot note" (when (> n 1) "s") " couldn't be placed")]
         list-el])))
 
 (defn sidenote-position

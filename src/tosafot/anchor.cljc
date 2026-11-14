@@ -1,4 +1,4 @@
-(ns snapdragon.anchor
+(ns tosafot.anchor
   "Text-quote/position selectors over a page's text, and re-anchoring them.")
 
 (def ^:private context-len 32)

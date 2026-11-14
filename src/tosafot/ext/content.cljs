@@ -1,11 +1,11 @@
-(ns snapdragon.ext.content
+(ns tosafot.ext.content
   "Content script: selection capture, popover, sidenotes, and saved notes on revisit."
   (:require [clojure.string :as str]
             [hyperphor.tunamelt.codec :as codec]
-            [snapdragon.anchor :as anchor]
-            [snapdragon.config :as config]
-            [snapdragon.core :as core]
-            [snapdragon.ui :as ui]))
+            [tosafot.anchor :as anchor]
+            [tosafot.config :as config]
+            [tosafot.core :as core]
+            [tosafot.ui :as ui]))
 
 ;; :host/:root are the shadow host and root; :bubble/:popover are transient elements;
 ;; :pending is the selection snapshot the popover is for.
@@ -17,8 +17,8 @@
 ;;; "active" marks open notes and the pending selection; "saved" marks closed saved notes.
 
 (def ^:private hl-styles
-  {"snapdragon"       "background-color: rgba(250, 200, 40, .38);"
-   "snapdragon-saved" "background-color: rgba(250, 200, 40, .16); text-decoration: underline dotted rgba(200, 150, 0, .9);"})
+  {"tosafot"       "background-color: rgba(250, 200, 40, .38);"
+   "tosafot-saved" "background-color: rgba(250, 200, 40, .16); text-decoration: underline dotted rgba(200, 150, 0, .9);"})
 
 (defn- highlight ^js [hl-name]
   (when (exists? js/CSS.highlights)
@@ -32,8 +32,8 @@
 
 (defn- highlight! [range & [saved?]]
   (when range
-    (some-> (highlight (if saved? "snapdragon" "snapdragon-saved")) (.delete range))
-    (some-> (highlight (if saved? "snapdragon-saved" "snapdragon")) (.add range))))
+    (some-> (highlight (if saved? "tosafot" "tosafot-saved")) (.delete range))
+    (some-> (highlight (if saved? "tosafot-saved" "tosafot")) (.add range))))
 
 (defn- unhighlight! [range]
   (when range
@@ -154,7 +154,7 @@
 
 (defn- root ^js []
   (or (:root @state)
-      (let [host (js/document.createElement "snapdragon-host")
+      (let [host (js/document.createElement "tosafot-host")
             root (.attachShadow host #js {:mode "open"})
             style (js/document.createElement "style")]
         (set! (.. host -style -cssText)
@@ -191,7 +191,7 @@
 (defn- persist! [id]
   (when (saved? id)
     (-> (send! {:type "ann/put" :annotation (:annotation (note id))})
-        (.catch #(js/console.error "Snapdragon: saving note failed" %)))))
+        (.catch #(js/console.error "Tosafot: saving note failed" %)))))
 
 ;;; Orphans: saved notes whose text wasn't found on the page
 
@@ -296,7 +296,7 @@
         (ui/set-busy! el true)
         (swap! state assoc-in [:notes id :streaming] mid)
         (try
-          (let [port (js/chrome.runtime.connect #js {:name "snapdragon/ask"})]
+          (let [port (js/chrome.runtime.connect #js {:name "tosafot/ask"})]
             (swap! state assoc-in [:notes id :port] port)
             (.addListener (.-onMessage port) #(on-port-message id mid %))
             (.addListener (.-onDisconnect port)
@@ -307,7 +307,7 @@
                                                 :url   js/location.href
                                                 :turns (core/prompt-turns (:annotation/thread annotation))}))))
           (catch :default _
-            (end-stream! id mid :error "Snapdragon was reloaded. Refresh the page to use it." :error? true)))))))
+            (end-stream! id mid :error "Tosafot was reloaded. Refresh the page to use it." :error? true)))))))
 
 (defn- stop! [id]
   (when-let [mid (:streaming (note id))]
@@ -333,7 +333,7 @@
     (swap! state update :notes dissoc id)
     (render-orphans!)
     (-> (send! {:type "ann/delete" :id (str (:annotation/id annotation))})
-        (.catch #(js/console.error "Snapdragon: deleting note failed" %)))))
+        (.catch #(js/console.error "Tosafot: deleting note failed" %)))))
 
 (defn- note-position [{:keys [range]}]
   (if range
@@ -422,7 +422,7 @@
                  (swap! state assoc-in [:notes (str (:annotation/id ann))] {:annotation ann}))
                (when (pos? (anchor-saved!))
                  (watch-for-orphans!))))
-      (.catch #(js/console.error "Snapdragon: loading saved notes failed" %))))
+      (.catch #(js/console.error "Tosafot: loading saved notes failed" %))))
 
 ;;; Popover
 
@@ -479,9 +479,13 @@
   (when (= "Escape" (.-key e))
     (close-popover!)))
 
-(defn- on-runtime-message [^js msg _sender _respond]
+(defn- on-runtime-message
+  "Handles \"open-popover\"; replies whether there was a selection to open it on."
+  [^js msg _sender respond]
   (when (= "open-popover" (.-type msg))
-    (when-let [snap (snapshot)] (open-popover! snap)))
+    (let [snap (snapshot)]
+      (when snap (open-popover! snap))
+      (respond (boolean snap))))
   false)
 
 (defn- load-prefs! []
@@ -490,8 +494,8 @@
       (.catch (fn [_] nil))))
 
 (defn init []
-  (when-not (.-__snapdragon js/window)
-    (set! (.-__snapdragon js/window) true)
+  (when-not (.-__tosafot js/window)
+    (set! (.-__tosafot js/window) true)
     (load-prefs!)
     (load-saved!)
     (.addListener js/chrome.storage.onChanged load-prefs!)

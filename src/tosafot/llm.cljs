@@ -1,4 +1,4 @@
-(ns snapdragon.llm
+(ns tosafot.llm
   "Provider-agnostic streaming chat over fetch + SSE."
   (:require [clojure.string :as str]
             [goog.object :as gobj]))

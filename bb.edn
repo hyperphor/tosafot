@@ -1,8 +1,25 @@
 {:tasks
- {build {:doc "Release-build the extension into ext/"
-         :task (shell "npx shadow-cljs release content background options")}
-  test  {:doc "Run cljs unit tests under node"
-         :task (shell "npx shadow-cljs compile test")}
-  e2e   {:doc "Build, then drive the extension in Chrome against a mock LLM"
-         :depends [build]
-         :task (shell "node dev/e2e.mjs")}}}
+ {:requires ([cheshire.core :as json]
+             [babashka.fs :as fs])
+  build   {:doc "Release-build the extension into ext/"
+           :task (shell "npx shadow-cljs release content background options")}
+  test    {:doc "Run cljs unit tests under node"
+           :task (shell "npx shadow-cljs compile test")}
+  e2e     {:doc "Build, then drive the extension in Chrome against a mock LLM"
+           :depends [build]
+           :task (shell "node dev/e2e.mjs")}
+  icons   {:doc "Render ext/icons/*.png from assets/*.svg (needs rsvg-convert)"
+           :task (do (shell "rsvg-convert -w 16 assets/icon-small.svg -o ext/icons/icon16.png")
+                     (doseq [n [32 48 128]]
+                       (shell (format "rsvg-convert -w %d assets/icon.svg -o ext/icons/icon%d.png" n n))))}
+  package {:doc "Build, then zip ext/ into dist/tosafot-<version>.zip"
+           :depends [build]
+           :task (let [v   (:version (json/parse-string (slurp "ext/manifest.json") true))
+                       pv  (:version (json/parse-string (slurp "package.json") true))
+                       zip (str "dist/tosafot-" v ".zip")]
+                   (when (not= v pv)
+                     (throw (ex-info (str "manifest.json is " v " but package.json is " pv) {})))
+                   (fs/create-dirs "dist")
+                   (fs/delete-if-exists zip)
+                   (shell {:dir "ext"} (str "zip -qr -X ../" zip " . -x '*/manifest.edn' '.*' '*/.*'"))
+                   (println "Wrote" zip))}}}
