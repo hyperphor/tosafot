@@ -1,6 +1,6 @@
 # Tosafot
 
-Select text on any web page, ask an LLM about it, and keep the conversation as a note in the margin. Named for the *tosafot* ("additions"), the medieval commentaries printed in the margins of the Talmud page.
+Select text on any web page, ask an LLM about it, and keep the conversation as a note in the margin. Named for the [*tosafot*](https://en.wikipedia.org/wiki/Tosafot) ("additions"), the medieval commentaries printed in the margins of the Talmud page.
 
 <p><a href="https://github.com/hyperphor/tosafot/releases/latest"><img src="assets/download-button.svg" alt="Download for Chrome" width="252" height="48"></a></p>
 
