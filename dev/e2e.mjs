@@ -271,6 +271,10 @@ try {
 
   // Esc dismisses a note that was opened but not used, even with focus in its textarea
   await openNote();
+  check('note title links to the home page', await page.evaluate(() => {
+    const l = document.querySelector('tosafot-host').shadowRoot.querySelector('.note-head a.home');
+    return l?.href === 'https://github.com/hyperphor/tosafot' && l.target === '_blank' && l.textContent === 'Tosafot';
+  }));
   check('Ask… opens an empty note with its composer focused',
         (await turns()).length === 0 && await page.evaluate(() =>
           document.querySelector('tosafot-host').shadowRoot.activeElement?.tagName === 'TEXTAREA'));
@@ -314,6 +318,9 @@ try {
   await select();
   await waitFor('.toolbar');
   const tbItems = await texts('.toolbar > .item');
+  check('toolbar icon links to the home page', await page.evaluate(() =>
+    document.querySelector('tosafot-host').shadowRoot.querySelector('.toolbar a.home')?.href
+      === 'https://github.com/hyperphor/tosafot'));
   check('toolbar shows Comment, Ask…, toolbar actions, and ⋯',
         JSON.stringify(tbItems) === JSON.stringify(['Comment', 'Ask…', 'Explain', '⋯']), JSON.stringify(tbItems));
   await (await $('.toolbar .more')).click();

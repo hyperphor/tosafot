@@ -43,7 +43,10 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
 .note { width: 360px; max-height: 75vh; display: flex; flex-direction: column; }
 .note-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: move;
              border-bottom: 1px solid #eee; color: #777; font-size: 11px; user-select: none; }
-.note-head .title { flex: 1; color: #6a5acd; font-weight: 600; }
+a.home { display: flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+a.home:hover .title { text-decoration: underline; }
+.note-head .home { margin-right: auto; }
+.note-head .title { color: #6a5acd; font-weight: 600; }
 .note-head button { padding: 0 6px; border: none; background: none; font-size: 11px; color: inherit; }
 .note-head button.close { font-size: 14px; }
 .note-head button.save:disabled { opacity: 1; color: #2a7; }
@@ -86,6 +89,14 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   .text pre { background: #2c2c30; }
 }
 ")
+
+(def home-url "https://github.com/hyperphor/tosafot")
+
+(defn- home-link
+  "Link to the Tosafot home page, opening in a new tab."
+  [& children]
+  (into [:a {:class "home" :href home-url :target "_blank" :rel "noopener" :title "Tosafot home page"}]
+        children))
 
 (defn- px [n] (str (js/Math.round n) "px"))
 
@@ -164,7 +175,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
                  (item "dim edit" "Edit actions…" "Open Tosafot settings" on-edit)])
         more (h (item "more" "⋯" "More" (fn [])))
         el (h [:div {:class "sd toolbar"}
-               [:span {:class "ic" :title "Tosafot"} (logo 18)]
+               [:span {:class "ic"} (home-link (logo 18))]
                [:span {:class "sep"}]
                (item "comment" "Comment" "Write a note on this" on-comment)
                (item "ask" "Ask…" "Ask a question about this" on-ask)
@@ -192,7 +203,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
   (.addEventListener
    handle "mousedown"
    (fn [^js e]
-     (when-not (= "BUTTON" (.. e -target -tagName))
+     (when-not (.closest (.-target e) "button, a")
        (.preventDefault e)
        (let [x0 (- (.-pageX e) (.-offsetLeft el))
              y0 (- (.-pageY e) (.-offsetTop el))
@@ -219,8 +230,7 @@ textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padd
         comment (fn [t] (settle!) (on-comment t))
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
-                (logo 14)
-                [:span {:class "title"} "Tosafot"]
+                (home-link (logo 14) [:span {:class "title"} "Tosafot"])
                 [:button {:class "save" :title "Keep this note on this page" :on-click on-save} "Save"]
                 [:button {:class "delete" :title "Delete this saved note" :on-click on-delete
                           :style "display:none"} "Delete"]
