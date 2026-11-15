@@ -58,7 +58,7 @@ Configured on the options page. Two API styles:
 - **Anthropic**: Messages API, streamed. Defaults to `claude-opus-5-5` at `low` effort for quick answers. Server-side refusal fallback (`fallbacks: "default"`) is enabled for models that support it.
 - **OpenAI-compatible**: any `/chat/completions` endpoint (OpenAI, OpenRouter, Ollama at `http://localhost:11434/v1`, …). The API key is optional.
 
-Keys are stored in `chrome.storage.local`. Requests go from the extension's service worker directly to the provider; there is no backend.
+Keys are stored in `chrome.storage.local`. Requests go from the extension's service worker directly to the provider; there is no backend. See [PRIVACY.md](PRIVACY.md) for exactly what is sent.
 
 ## Tests
 

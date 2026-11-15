@@ -5,7 +5,7 @@
   "minimum_chrome_version": "105",
   "homepage_url": "https://github.com/hyperphor/tosafot",
   "description": "Select text on any page and ask an LLM about it.",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],
   "background": {"service_worker": "js/background/background.js"},
   "content_scripts": [
