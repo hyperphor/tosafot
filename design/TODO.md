@@ -1,8 +1,10 @@
 # All the options are showing up as buttons
 Seems wrong, maybe there needs to be another level of control in config?
 
-# Background system prompt
+# DONE Background system prompt
 Easy and valuable, explain to the LLM who you are and what you want.
+
+This is already there, maybe give it a good default
 
 # recursion!
 Need to be able to select text in a comment and operate on it.

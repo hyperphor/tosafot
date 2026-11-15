@@ -6,3 +6,4 @@ ext/js/
 .nrepl-port
 .#*
 dist/
+claude-code/
