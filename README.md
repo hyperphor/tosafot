@@ -16,13 +16,15 @@ Select text and a small toolbar appears: **Comment** or **Ask…** opens an empt
 
 Actions are configurable on the settings page: each has a name, the question it asks (shown in the thread), optional extra instructions to the model (sent with the question but not shown), and whether it's on the toolbar, under ⋯, or off. A library of built-ins (Argue, Steelman, Find the flaw, Quiz me, …) starts mostly off; you can add your own.
 
-Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up (the model sees the whole thread), **⌘/Ctrl+Enter** adds your own comment without calling the model. Comments are passed to the model as notes on later asks. A note can also start as a comment: from the toolbar's **Comment**, Enter comments instead of asking until you've written the first one. **Stop** cancels a streaming answer; **Share** copies the thread as Markdown, or opens a post to X, Bluesky, or Mastodon with the quoted passage, your comments (or, if there are none, the first answer), and the page's title and link. Mastodon goes through [share.joinmastodon.org](https://share.joinmastodon.org), which asks which server you use.
+Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up (the model sees the whole thread), **⌘/Ctrl+Enter** adds your own comment without calling the model. Comments are passed to the model as notes on later asks. A note can also start as a comment: from the toolbar's **Comment**, Enter comments instead of asking until you've written the first one. **Stop** cancels a streaming answer.
+
+**Share**, in the note's header, copies the thread as Markdown or opens a post to X, Bluesky, or Mastodon with the quoted passage, your comments (or, if there are none, the first answer), and the page's title and link. Mastodon goes through [share.joinmastodon.org](https://share.joinmastodon.org), which asks which server you use.
 
 Notes are ephemeral until you **Save** them (adding a comment saves a note automatically). Saved notes are stored in the extension and come back when you revisit the page: their text is highlighted with a dotted underline, and clicking it reopens the note. If the text a note was attached to is no longer on the page, a badge in the bottom-right corner lists it. **Delete** removes a saved note.
 
 <br clear="right">
 
-Status: milestone 3 (saved notes, re-anchoring, orphan list), plus the selection toolbar and configurable actions.
+Status: version 0.5.0. Milestone 3 (saved notes, re-anchoring, orphan list), plus the selection toolbar, configurable actions, and sharing.
 
 ## Install from a package
 
@@ -47,6 +49,7 @@ Rebuild after changes and click reload on the extension card. Builds are release
 bb package        # build, then write dist/tosafot-<version>.zip
 bb icons          # re-render ext/icons/*.png from assets/*.svg (needs rsvg-convert)
 node dev/screenshots.mjs   # re-render assets/screenshots/ from the built extension
+node dev/store-shots.mjs   # Chrome Web Store images into assets/store/ (real pages and answers: needs ANTHROPIC_API_KEY)
 ```
 
 The version lives in both `ext/manifest.json` and `package.json`; `bb package` refuses to run if they differ.
@@ -79,5 +82,7 @@ EXT_DIR=path node dev/e2e.mjs   # same, against another unpacked copy (e.g. an u
 | `src/tosafot/config.cljs` | settings storage |
 | `src/tosafot/ext/` | extension entry points: content script, service worker, options page |
 | `ext/` | unpacked extension (manifest, options.html, icons, built `js/`) |
-| `assets/` | icon sources (`icon.svg`; `icon-small.svg` is a simplified 16 px version), download button, README screenshots |
+| `assets/` | icon sources (`icon.svg`; `icon-small.svg` is a simplified 16 px version), download button, README screenshots, `store/` images |
 | `dev/e2e.mjs` | end-to-end test |
+| `PRIVACY.md` | privacy policy |
+| `design/store-listing.md` | Chrome Web Store listing text, permission justifications, data disclosures |
