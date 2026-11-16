@@ -20,7 +20,8 @@
     {:providers     [p]
      :active        (:id p)
      :system-prompt ""
-     :show-bubble?  true}))
+     :show-bubble?  true
+     :pkg-tag       "tosafot"}))
 
 (defn load-settings
   "Promise of the settings map, merged over defaults; :actions includes any new built-ins."

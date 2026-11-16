@@ -24,7 +24,7 @@ Nothing is sent until you ask. Comments you write without asking are not sent at
 
 ## Sharing
 
-If you choose **Share → Post to X, Bluesky, or Mastodon**, Tosafot opens that service's compose page in a new tab with the passage, your comments (or the first answer), and the page's title and URL filled in. Nothing is posted unless you post it there. **Copy Markdown** puts the thread on your clipboard.
+If you choose **Share → Post to X, Bluesky, or Mastodon**, Tosafot opens that service's compose page in a new tab with the passage, your comments (or the first answer), and the page's title and URL filled in. Nothing is posted unless you post it there. **Copy Markdown** puts the thread on your clipboard. **Export to Logseq** writes the note into the Logseq graph folder you chose, on your computer; it sends nothing anywhere.
 
 ## What Tosafot doesn't do
 

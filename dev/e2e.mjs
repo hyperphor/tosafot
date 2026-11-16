@@ -513,6 +513,63 @@ try {
   check('late-rendered text: no orphan badge left', !(await has('.orphans')));
   variant = 'normal';
 
+  // Export to Logseq: hidden until a graph folder is set; then writes the latest journal.
+  // Headless Chrome has no folder picker, so the graph is an OPFS folder (always writable).
+  await page.goto(`${base}/page`);
+  await openNote();
+  await submit('Worth a journal entry', true);
+  await waitFor('.turn.comment .text', 'journal entry');
+  check('no Export to Logseq until a graph is set', !(await has('.share .menu .export')));
+  await closeNote();
+  await sw.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const g = await root.getDirectoryHandle('graph', { create: true });
+    const j = await g.getDirectoryHandle('journals', { create: true });
+    for (const [n, t] of [['2026_11_14.md', '- older\n'], ['2026_11_15.md', '- earlier block\n\t- kid\n']]) {
+      const w = await (await j.getFileHandle(n, { create: true })).createWritable();
+      await w.write(t); await w.close();
+    }
+    const db = await new Promise((ok, no) => {
+      const r = indexedDB.open('tosafot-files', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('handles');
+      r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+    });
+    await new Promise((ok, no) => {
+      const t = db.transaction('handles', 'readwrite');
+      t.objectStore('handles').put(g, 'graph');
+      t.oncomplete = ok; t.onerror = () => no(t.error);
+    });
+    const k = 'snapdragon/settings';
+    const s = (await chrome.storage.local.get(k))[k];
+    await chrome.storage.local.set({ [k]: { ...s, 'pkg-folder': 'graph', 'pkg-tag': 'tosafot' } });
+  });
+  await new Promise(r => setTimeout(r, 300));
+  await clickTarget();
+  await waitFor('.note', null, 3000);
+  const journal = () => sw.evaluate(async () => {
+    const j = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('graph'))
+      .getDirectoryHandle('journals');
+    return (await (await j.getFileHandle('2026_11_15.md')).getFile()).text();
+  });
+  const exportNote = async () => {
+    await page.evaluate(() => { document.querySelector('tosafot-host').shadowRoot.querySelector('.note-msg').textContent = ''; });
+    await (await $('.note-head .share-btn')).click();
+    await (await $('.share .menu .export')).click();
+    await waitFor('.note-msg', 'journals/2026_11_15.md');
+  };
+  await exportNote();
+  let jt = await journal();
+  check('export appends the note to the latest journal',
+        jt.startsWith('- earlier block\n\t- kid\n- [') && jt.includes(') #tosafot\n  id:: ')
+        && jt.includes('\t- > Curry-Howard correspondence\n'), jt);
+  await follow('Second thought', true);
+  await waitFor('.note .thread', 'Second thought');
+  await exportNote();
+  jt = await journal();
+  check('re-export updates the block in place',
+        (jt.match(/id:: /g) || []).length === 1 && jt.includes('\t- Second thought\n'), jt);
+  await closeNote();
+
   // Missing key -> settings prompt
   await setProvider('');
   await openNote();

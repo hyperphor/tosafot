@@ -5,6 +5,7 @@
             [hyperphor.tunamelt.core :as tm]
             [tosafot.config :as config]
             [tosafot.core :as core]
+            [tosafot.files :as files]
             [tosafot.llm :as llm]))
 
 (defn- post! [^js port m]
@@ -49,6 +50,8 @@
     "ann/put"    (.then (tm/put (core/annotation-uri (:annotation/id annotation)) annotation)
                         (constantly true))
     "ann/delete" (tm/delete (core/annotation-uri id))
+    "pkg/export" (.then (config/load-settings)
+                        #(files/export! (core/revive annotation) (:pkg-tag %)))
     nil))
 
 (defn- on-message [^js msg _sender respond]
@@ -58,7 +61,7 @@
               (.then #(respond #js {:ok true :value %}))
               (.catch (fn [^js e]
                         (js/console.error "tosafot store" e)
-                        (respond #js {:ok false :error (.-message e)}))))
+                        (respond #js {:ok false :error (.-message e) :code (.-code e)}))))
           ;; Keep the channel open for the async reply.
           true)
       (do (when (= "open-options" (:type m))

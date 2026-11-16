@@ -3,10 +3,12 @@
   (:require [clojure.string :as str]
             [tosafot.config :as config]
             [tosafot.core :as core]
-            [tosafot.dom :refer [h]]))
+            [tosafot.dom :refer [h]]
+            [tosafot.files :as files]))
 
 (defonce settings (atom nil))
 (defonce status (atom nil))
+(defonce graph (atom nil))   ; {:handle :perm :error}
 
 (declare render!)
 
@@ -108,6 +110,60 @@
     [:button {:on-click #(do (swap! settings assoc :actions core/builtin-actions) (render!))}
      "Reset all to defaults"]]])
 
+;;; Export to Logseq. The folder is saved as soon as it's chosen; :pkg-folder (its name) tells
+;;; content scripts that export is set up, since they can't see the handle.
+
+(defn- save-key! [k v]
+  (swap! settings assoc k v)
+  (.then (config/load-settings) #(config/save! (assoc % k v))))
+
+(defn- load-graph! []
+  (-> (files/graph-handle)
+      (.then (fn [h] (if h (.then (files/permission h) #(reset! graph {:handle h :perm %})) (reset! graph nil))))
+      (.then #(render!))))
+
+(defn- choose-graph! []
+  (-> (js/showDirectoryPicker #js {:mode "readwrite" :id "tosafot-graph"})
+      (.then (fn [^js h]
+               (-> (files/journals-dir h)
+                   (.then (fn [_]
+                            (-> (files/set-graph-handle! h)
+                                (.then #(save-key! :pkg-folder (.-name h)))
+                                (.then load-graph!)))
+                          (fn [_]
+                            (swap! graph assoc :error (str "“" (.-name h) "” has no journals folder, "
+                                                           "so it doesn't look like a Logseq graph."))
+                            (render!))))))
+      (.catch (fn [^js e] (when-not (= "AbortError" (.-name e)) (js/console.error e))))))
+
+(defn- forget-graph! []
+  (-> (files/set-graph-handle! nil)
+      (.then #(save-key! :pkg-folder nil))
+      (.then load-graph!)))
+
+(defn- pkg-editor [{:keys [pkg-tag]}]
+  (let [{:keys [^js handle perm error]} @graph]
+    [:fieldset {:class "pkg"}
+     [:legend "Export to Logseq"]
+     [:p {:class "help"} "Choose your Logseq graph's folder to add “Export to Logseq” to a note's Share menu. "
+      "It adds the note as a block at the end of the latest journal page, headed by the page's link and "
+      "the tag below. Exporting again updates that block."]
+     [:div {:class "row graph"}
+      [:span {:class "folder"} (if handle (str "Graph folder: " (.-name handle)) "No graph folder chosen.")]
+      [:div {:class "row-buttons"}
+       [:button {:class "choose" :on-click choose-graph!} (if handle "Change…" "Choose folder…")]
+       (when (and handle (not= "granted" perm))
+         [:button {:class "grant"
+                   :on-click #(-> (files/request-permission handle) (.then load-graph!))}
+          "Allow access"])
+       (when handle [:button {:class "forget" :on-click forget-graph!} "Forget"])]]
+     (when (and handle (not= "granted" perm))
+       [:p {:class "status error"} "Chrome needs your permission again to write to this folder."])
+     (when error [:p {:class "status error"} (str "⚠ " error)])
+     (field "Tag"
+            [:input {:type "text" :class "pkg-tag" :value pkg-tag :placeholder "tosafot"
+                     :on-input #(swap! settings assoc :pkg-tag (.. % -target -value))}])]))
+
 (defn- invalid-actions [actions]
   (filter #(or (str/blank? (:label %)) (str/blank? (:prompt %))) actions))
 
@@ -130,6 +186,7 @@
              [:textarea {:value system-prompt
                          :on-input #(swap! settings assoc :system-prompt (.. % -target -value))}])]
      (actions-editor actions)
+     (pkg-editor s)
      [:div {:class "actions"}
       [:button {:id "save"
                 :on-click (fn []
@@ -149,4 +206,5 @@
 
 (defn init []
   (-> (config/load-settings)
-      (.then #(do (reset! settings %) (render!)))))
+      (.then #(do (reset! settings %) (render!)))
+      (.then load-graph!)))

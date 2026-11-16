@@ -177,7 +177,10 @@
   [m]
   (-> (js/chrome.runtime.sendMessage (clj->js (codec/jsonable m)))
       (.then (fn [^js r]
-               (if (and r (.-ok r)) (.-value r) (throw (js/Error. (if r (.-error r) "No reply"))))))))
+               (if (and r (.-ok r))
+                 (.-value r)
+                 (throw (doto (js/Error. (if r (.-error r) "No reply"))
+                          (aset "code" (some-> r .-code)))))))))
 
 (defn- note [id] (get-in @state [:notes id]))
 (defn- saved? [id] (get-in (note id) [:annotation :annotation/saved?]))
@@ -265,6 +268,21 @@
   (some-> (:el (note id)) (ui/set-saved! true))
   (persist! id))
 
+(defn- open-options! [] (js/chrome.runtime.sendMessage #js {:type "open-options"}))
+
+(defn- export!
+  "Write the note into the Logseq graph's latest journal, and save it."
+  [id]
+  (let [el (:el (note id))]
+    (-> (send! {:type "pkg/export" :annotation (:annotation (note id))})
+        (.then (fn [file]
+                 (update-ann! id assoc :annotation/pkg-file file)
+                 (save! id)
+                 (some-> el (ui/note-message! (str "Added to journals/" file)))))
+        (.catch (fn [^js e]
+                  (some-> el (ui/note-message! (.-message e) :error? true
+                                               :action ["Open settings" open-options!])))))))
+
 (defn- comment!
   "Add a comment. Notes with your own writing in them are saved automatically."
   [id text]
@@ -343,6 +361,12 @@
     {:x (+ js/window.scrollX (max 8 (- js/window.innerWidth 380)))
      :y (+ js/window.scrollY 60)}))
 
+(defn- pkg-ready?
+  "Whether Export to Logseq is set up: a graph folder chosen and a tag."
+  []
+  (let [{:keys [pkg-folder pkg-tag]} @state]
+    (and (seq pkg-folder) (not (str/blank? pkg-tag)))))
+
 (defn- open-note!
   "Show the sidenote for registered note `id`, or bring it to the front if it's open.
   `mode` :comment makes Enter comment in a new note's composer."
@@ -361,6 +385,7 @@
                                    :mode mode
                                    :actions (:actions @state)
                                    :on-action (fn [{:keys [prompt instructions]}] (ask! id prompt instructions))
+                                   :on-export (when (pkg-ready?) #(export! id))
                                    :on-copy #(js/navigator.clipboard.writeText
                                               (core/thread->markdown (:annotation (note id))))
                                    :on-share #(js/window.open
@@ -508,7 +533,7 @@
 
 (defn- load-prefs! []
   (-> (config/load-settings)
-      (.then #(swap! state merge (select-keys % [:show-bubble? :actions])))
+      (.then #(swap! state merge (select-keys % [:show-bubble? :actions :pkg-folder :pkg-tag])))
       (.catch (fn [_] nil))))
 
 (defn init []

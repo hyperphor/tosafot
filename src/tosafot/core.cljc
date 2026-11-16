@@ -131,7 +131,7 @@
   (update ann :annotation/thread
           (fn [thread] (mapv #(if (= id (:msg/id %)) (apply f % args) %) thread))))
 
-(defn- usable?
+(defn usable?
   "Whether a message belongs in the history sent to the model."
   [msg]
   (or (human? msg)
