@@ -271,14 +271,14 @@
 (defn- open-options! [] (js/chrome.runtime.sendMessage #js {:type "open-options"}))
 
 (defn- export!
-  "Write the note into the Logseq graph's latest journal, and save it."
+  "Write the note into the notebook's latest note, and save it."
   [id]
   (let [el (:el (note id))]
     (-> (send! {:type "pkg/export" :annotation (:annotation (note id))})
         (.then (fn [file]
                  (update-ann! id assoc :annotation/pkg-file file)
                  (save! id)
-                 (some-> el (ui/note-message! (str "Added to journals/" file)))))
+                 (some-> el (ui/note-message! (str "Added to " file)))))
         (.catch (fn [^js e]
                   (some-> el (ui/note-message! (.-message e) :error? true
                                                :action ["Open settings" open-options!])))))))
@@ -362,7 +362,7 @@
      :y (+ js/window.scrollY 60)}))
 
 (defn- pkg-ready?
-  "Whether Export to Logseq is set up: a graph folder chosen and a tag."
+  "Whether Export to notebook is set up: a folder chosen and a tag."
   []
   (let [{:keys [pkg-folder pkg-tag]} @state]
     (and (seq pkg-folder) (not (str/blank? pkg-tag)))))
@@ -386,6 +386,7 @@
                                    :actions (:actions @state)
                                    :on-action (fn [{:keys [prompt instructions]}] (ask! id prompt instructions))
                                    :on-export (when (pkg-ready?) #(export! id))
+                                   :export-label (:pkg-label @state)
                                    :on-copy #(js/navigator.clipboard.writeText
                                               (core/thread->markdown (:annotation (note id))))
                                    :on-share #(js/window.open
@@ -533,7 +534,7 @@
 
 (defn- load-prefs! []
   (-> (config/load-settings)
-      (.then #(swap! state merge (select-keys % [:show-bubble? :actions :pkg-folder :pkg-tag])))
+      (.then #(swap! state merge (select-keys % [:show-bubble? :actions :pkg-folder :pkg-tag :pkg-label])))
       (.catch (fn [_] nil))))
 
 (defn init []

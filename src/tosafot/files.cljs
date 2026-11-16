@@ -1,6 +1,6 @@
 (ns tosafot.files
-  "The Logseq graph folder: its File System Access handle, kept in the extension's IndexedDB,
-  and writing notes into its journals."
+  "The notebook folder: its File System Access handle, kept in the extension's IndexedDB, and
+  writing notes into its daily notes."
   (:require [tosafot.pkg :as pkg]))
 
 ;;; Handles can't go in chrome.storage, so they get their own small database.
@@ -43,9 +43,10 @@
   (.requestPermission handle rw))
 
 (defn journals-dir
-  "Promise of the graph's journals/ folder; rejects if there isn't one."
+  "Promise of the folder notes go in: `handle`'s journals/ subfolder if it has one (a Logseq
+  graph), else `handle` itself (a daily notes folder)."
   [^js handle]
-  (.getDirectoryHandle handle "journals"))
+  (.catch (.getDirectoryHandle handle "journals") (constantly handle)))
 
 (defn- file-names
   "Promise of the file names in `dir`."
@@ -77,20 +78,19 @@
 (defn export!
   "Write `ann` into the graph: replacing its block in the journal it went to before, if it's
   still there, else at the end of the latest journal. Promise of the journal file name.
-  Rejects with .code \"not-configured\", \"permission\" or \"no-journals\"."
+  Rejects with .code \"not-configured\" or \"permission\"."
   [ann tag]
   (let [id (str (:annotation/id ann))
         block (pkg/render [(pkg/note-block ann tag)])]
     (-> (graph-handle)
         (.then (fn [h]
                  (if-not h
-                   (throw (error "not-configured" "No Logseq graph folder is set."))
+                   (throw (error "not-configured" "No notebook folder is set."))
                    (.then (permission h)
                           (fn [p]
                             (if (= "granted" p)
-                              (-> (journals-dir h)
-                                  (.catch #(throw (error "no-journals" "The graph folder has no journals/ folder."))))
-                              (throw (error "permission" "Tosafot needs permission to write to the graph folder."))))))))
+                              (journals-dir h)
+                              (throw (error "permission" "Tosafot needs permission to write to the notebook folder."))))))))
         (.then (fn [dir]
                  (let [prev (:annotation/pkg-file ann)]
                    (-> (if prev (read-text dir prev) (js/Promise.resolve nil))

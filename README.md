@@ -20,7 +20,7 @@ Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up
 
 **Share**, in the note's header, copies the thread as Markdown or opens a post to X, Bluesky, or Mastodon with the quoted passage, your comments (or, if there are none, the first answer), and the page's title and link. Mastodon goes through [share.joinmastodon.org](https://share.joinmastodon.org), which asks which server you use.
 
-**Export to Logseq**, also in the Share menu, adds the note to your Logseq graph. It appears once you've chosen the graph's folder in settings. The note goes in as a block at the end of the latest journal page, headed by the page's link and a tag (`#tosafot` by default; set it to `blyg`, say, to hand notes to other tooling). The quote, your questions, and your comments are child blocks, and answers sit under an `#AskClaude` block, as the logseq-claude plugin does. Exporting again updates that block where it is. Chrome may ask you to allow access to the folder again after a restart; settings has a button for that.
+**Export to notebook** (the name is configurable), also in the Share menu, adds the note to an Obsidian, Logseq, or other Markdown-based notebook. It appears once you've chosen the notebook's daily notes folder in settings (for a Logseq graph, choose the graph folder; its `journals/` is used) and set a tag. The note goes in as an outline block at the end of the latest note there (by file name), headed by the page's link and the tag (`#tosafot` by default). The quote, your questions, and your comments are child blocks, and answers sit under an `#AskClaude` block, as the logseq-claude plugin does. The block carries an `id::`, so exporting again updates it where it is. Chrome may ask you to allow access to the folder again after a restart; settings has a button for that. **Brave** turns off the folder picker this uses: open `brave://flags/#file-system-access-api`, set "File System Access API" to Enabled, and relaunch.
 
 Notes are ephemeral until you **Save** them (adding a comment saves a note automatically). Saved notes are stored in the extension and come back when you revisit the page: their text is highlighted with a dotted underline, and clicking it reopens the note. If the text a note was attached to is no longer on the page, a badge in the bottom-right corner lists it. **Delete** removes a saved note.
 
@@ -80,7 +80,7 @@ EXT_DIR=path node dev/e2e.mjs   # same, against another unpacked copy (e.g. an u
 | `src/tosafot/core.cljc` | annotation/thread data model, actions library, prompt construction |
 | `src/tosafot/llm.cljs` | provider adapters, fetch + SSE streaming |
 | `src/tosafot/ui.cljs`, `dom.cljs` | selection toolbar and sidenote components (shadow DOM) |
-| `src/tosafot/pkg.cljc`, `files.cljs` | Export to Logseq: note → outline block, journal placement; the graph folder handle |
+| `src/tosafot/pkg.cljc`, `files.cljs` | Export to notebook: note → outline block, placement; the folder handle |
 | `src/tosafot/anchor.cljc` | text-quote/position selectors and re-anchoring |
 | `src/tosafot/config.cljs` | settings storage |
 | `src/tosafot/ext/` | extension entry points: content script, service worker, options page |

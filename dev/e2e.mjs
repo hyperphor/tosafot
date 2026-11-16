@@ -513,13 +513,13 @@ try {
   check('late-rendered text: no orphan badge left', !(await has('.orphans')));
   variant = 'normal';
 
-  // Export to Logseq: hidden until a graph folder is set; then writes the latest journal.
+  // Export to notebook: hidden until a folder is set; then writes the latest journal.
   // Headless Chrome has no folder picker, so the graph is an OPFS folder (always writable).
   await page.goto(`${base}/page`);
   await openNote();
   await submit('Worth a journal entry', true);
   await waitFor('.turn.comment .text', 'journal entry');
-  check('no Export to Logseq until a graph is set', !(await has('.share .menu .export')));
+  check('no notebook export until a folder is set', !(await has('.share .menu .export')));
   await closeNote();
   await sw.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
@@ -541,11 +541,15 @@ try {
     });
     const k = 'snapdragon/settings';
     const s = (await chrome.storage.local.get(k))[k];
-    await chrome.storage.local.set({ [k]: { ...s, 'pkg-folder': 'graph', 'pkg-tag': 'tosafot' } });
+    await chrome.storage.local.set({ [k]: { ...s, 'pkg-folder': 'graph', 'pkg-tag': 'tosafot',
+                                            'pkg-label': 'Into my notes' } });
   });
   await new Promise(r => setTimeout(r, 300));
   await clickTarget();
   await waitFor('.note', null, 3000);
+  check('export menu item uses the configured name',
+        (await page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
+          .querySelector('.share .menu .export')?.textContent)) === 'Into my notes');
   const journal = () => sw.evaluate(async () => {
     const j = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('graph'))
       .getDirectoryHandle('journals');
@@ -555,7 +559,7 @@ try {
     await page.evaluate(() => { document.querySelector('tosafot-host').shadowRoot.querySelector('.note-msg').textContent = ''; });
     await (await $('.note-head .share-btn')).click();
     await (await $('.share .menu .export')).click();
-    await waitFor('.note-msg', 'journals/2026_11_15.md');
+    await waitFor('.note-msg', 'Added to 2026_11_15.md');
   };
   await exportNote();
   let jt = await journal();

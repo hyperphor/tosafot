@@ -21,7 +21,8 @@
      :active        (:id p)
      :system-prompt ""
      :show-bubble?  true
-     :pkg-tag       "tosafot"}))
+     :pkg-tag       "tosafot"
+     :pkg-label     "Export to notebook"}))
 
 (defn load-settings
   "Promise of the settings map, merged over defaults; :actions includes any new built-ins."

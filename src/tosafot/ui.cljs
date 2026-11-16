@@ -82,7 +82,7 @@ a.home:hover .title { text-decoration: underline; }
 .menu button.item:hover { background: #f0ecff; }
 .icon { flex: none; display: block; }
 .icon.copy { fill: none; stroke: #777; stroke-width: 2; }
-.icon.logseq { fill: #85c8c8; }
+.icon.notebook { fill: none; stroke: #6a5acd; stroke-width: 2; }
 .note-msg { padding: 5px 10px; font-size: 12px; color: #2a7; border-bottom: 1px solid #eee; }
 .note-msg.error { color: #c0392b; }
 .note-msg button { margin-left: 6px; font-size: 11px; padding: 1px 6px; }
@@ -233,7 +233,7 @@ a.home:hover .title { text-decoration: underline; }
   {:x "M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"
    :bluesky "M5.202 2.857C7.954 4.922 10.913 9.11 12 11.358c1.087-2.247 4.046-6.436 6.798-8.501C20.783 1.366 24 .213 24 3.883c0 .732-.42 6.156-.667 7.037-.856 3.061-3.978 3.842-6.755 3.37 4.854.826 6.089 3.562 3.422 6.299-5.065 5.196-7.28-1.304-7.847-2.97-.104-.305-.152-.448-.153-.327 0-.121-.05.022-.153.327-.568 1.666-2.782 8.166-7.847 2.97-2.667-2.737-1.432-5.473 3.422-6.3-2.777.473-5.899-.308-6.755-3.369C.42 10.04 0 4.615 0 3.883c0-3.67 3.217-2.517 5.202-1.026"
    :mastodon "M23.268 5.313c-.35-2.578-2.617-4.61-5.304-5.004C17.51.242 15.792 0 11.813 0h-.03c-3.98 0-4.835.242-5.288.309C3.882.692 1.496 2.518.917 5.127.64 6.412.61 7.837.661 9.143c.074 1.874.088 3.745.26 5.611.118 1.24.325 2.47.62 3.68.55 2.237 2.777 4.098 4.96 4.857 2.336.792 4.849.923 7.256.38.265-.061.527-.132.786-.213.585-.184 1.27-.39 1.774-.753a.057.057 0 0 0 .023-.043v-1.809a.052.052 0 0 0-.02-.041.053.053 0 0 0-.046-.01 20.282 20.282 0 0 1-4.709.545c-2.73 0-3.463-1.284-3.674-1.818a5.593 5.593 0 0 1-.319-1.433.053.053 0 0 1 .066-.054c1.517.363 3.072.546 4.632.546.376 0 .75 0 1.125-.01 1.57-.044 3.224-.124 4.768-.422.038-.008.077-.015.11-.024 2.435-.464 4.753-1.92 4.989-5.604.008-.145.03-1.52.03-1.67.002-.512.167-3.63-.024-5.545zm-3.748 9.195h-2.561V8.29c0-1.309-.55-1.976-1.67-1.976-1.23 0-1.846.79-1.846 2.35v3.403h-2.546V8.663c0-1.56-.617-2.35-1.848-2.35-1.112 0-1.668.668-1.67 1.977v6.218H4.822V8.102c0-1.31.337-2.35 1.011-3.12.696-.77 1.608-1.164 2.74-1.164 1.311 0 2.302.5 2.962 1.498l.638 1.06.638-1.06c.66-.999 1.65-1.498 2.96-1.498 1.13 0 2.043.395 2.74 1.164.675.77 1.012 1.81 1.012 3.12z"
-   :logseq "M19.3 9.838c-2.677-1.366-5.467-1.56-8.316-.607-1.738.58-3.197 1.58-4.267 3.088-1.031 1.452-1.45 3.071-1.184 4.837.268 1.781 1.164 3.228 2.505 4.4C9.96 23.231 12.24 23.942 15.092 24c.41-.053 1.157-.103 1.883-.255 2.004-.418 3.754-1.325 5.08-2.915 1.621-1.942 2.108-4.148 1.272-6.562-.704-2.034-2.138-3.467-4.027-4.43ZM7.515 6.295c.507-2.162-.88-4.664-2.988-5.37-1.106-.37-2.156-.267-3.075.492C.61 2.114.294 3.064.271 4.146c.009.135.016.285.029.435.01.102.021.205.042.305.351 1.703 1.262 2.98 2.9 3.636 1.912.766 3.808-.244 4.273-2.227Zm4.064-1.146c1.075.377 2.152.31 3.22-.033.94-.3 1.755-.793 2.341-1.609.803-1.117.5-2.387-.717-3.027-.6-.317-1.246-.438-1.927-.48-.47.076-.95.117-1.41.234-1.068.27-2.002.781-2.653 1.7-.495.697-.64 1.45-.174 2.227.303.504.779.799 1.32.988Z"
+   :notebook "M6 2h11l3 3v17H6zM9 7h8M9 11h8M9 15h5"
    :copy "M9 9h11v11H9zM5 15H4V4h11v1"})
 
 (defn- icon
@@ -250,9 +250,9 @@ a.home:hover .title { text-decoration: underline; }
     svg))
 
 (defn- share-menu
-  "Share button with a menu: Copy Markdown, Export to Logseq (if `on-export`), then
-  (on-share service) for each share-services key."
-  [on-copy on-share on-export]
+  "Share button with a menu: Copy Markdown, the notebook export (if `on-export`, named
+  `export-label`), then (on-share service) for each share-services key."
+  [on-copy on-share on-export export-label]
   (let [menu (h [:div {:class "menu" :style "display:none"}])
         show! #(set! (.. menu -style -display) (if % "" "none"))
         pick (fn [f] (fn [] (show! false) (f)))]
@@ -260,9 +260,9 @@ a.home:hover .title { text-decoration: underline; }
              (h [:button {:class "item" :title "Copy thread as Markdown" :on-click (pick on-copy)}
                  (icon :copy) "Copy Markdown"]))
     (when on-export
-      (.append menu (h [:button {:class "item export" :title "Add this note to your latest Logseq journal"
+      (.append menu (h [:button {:class "item export" :title "Add this note to your notebook's latest note"
                                  :on-click (pick on-export)}
-                        (icon :logseq) "Export to Logseq"])))
+                        (icon :notebook) export-label])))
     (.append menu (h [:hr]))
     (doseq [[k {:keys [label]}] core/share-services]
       (.append menu (h [:button {:class "item" :title (str "Open a " label " post with this note")
@@ -277,7 +277,7 @@ a.home:hover .title { text-decoration: underline; }
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
-  [{:keys [quote on-close on-copy on-share on-export on-ask on-comment on-stop on-save on-delete
+  [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-save on-delete
            actions on-action mode] :as pos}]
   (let [comment-first (atom (= mode :comment))
         ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
@@ -292,7 +292,7 @@ a.home:hover .title { text-decoration: underline; }
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
                 (home-link (logo 14) [:span {:class "title"} "Tosafot"])
-                (share-menu on-copy on-share on-export)
+                (share-menu on-copy on-share on-export export-label)
                 [:button {:class "save" :title "Keep this note on this page" :on-click on-save} "Save"]
                 [:button {:class "delete" :title "Delete this saved note" :on-click on-delete
                           :style "display:none"} "Delete"]

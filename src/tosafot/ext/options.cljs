@@ -110,7 +110,7 @@
     [:button {:on-click #(do (swap! settings assoc :actions core/builtin-actions) (render!))}
      "Reset all to defaults"]]])
 
-;;; Export to Logseq. The folder is saved as soon as it's chosen; :pkg-folder (its name) tells
+;;; Export to notebook. The folder is saved as soon as it's chosen; :pkg-folder (its name) tells
 ;;; content scripts that export is set up, since they can't see the handle.
 
 (defn- save-key! [k v]
@@ -125,33 +125,47 @@
 (defn- choose-graph! []
   (-> (js/showDirectoryPicker #js {:mode "readwrite" :id "tosafot-graph"})
       (.then (fn [^js h]
-               (-> (files/journals-dir h)
-                   (.then (fn [_]
-                            (-> (files/set-graph-handle! h)
-                                (.then #(save-key! :pkg-folder (.-name h)))
-                                (.then load-graph!)))
-                          (fn [_]
-                            (swap! graph assoc :error (str "“" (.-name h) "” has no journals folder, "
-                                                           "so it doesn't look like a Logseq graph."))
-                            (render!))))))
-      (.catch (fn [^js e] (when-not (= "AbortError" (.-name e)) (js/console.error e))))))
+               (-> (files/set-graph-handle! h)
+                   (.then #(save-key! :pkg-folder (.-name h)))
+                   (.then load-graph!))))
+      (.catch (fn [^js e]
+                (when-not (= "AbortError" (.-name e))
+                  (swap! graph assoc :error (.-message e))
+                  (render!))))))
+
+(defn- picker-help
+  "Why the folder picker isn't available, and how to turn it on, or nil if it is."
+  []
+  (when-not (exists? js/showDirectoryPicker)
+    (if (exists? js/navigator.brave)
+      [:p {:class "status error picker-help"}
+       "Brave turns off the folder picker this needs. To turn it on, open "
+       [:code "brave://flags/#file-system-access-api"] ", set “File System Access API” to Enabled, "
+       "relaunch Brave, then come back here."]
+      [:p {:class "status error picker-help"}
+       "This browser doesn't support the folder picker (the File System Access API) that this needs."])))
 
 (defn- forget-graph! []
   (-> (files/set-graph-handle! nil)
       (.then #(save-key! :pkg-folder nil))
       (.then load-graph!)))
 
-(defn- pkg-editor [{:keys [pkg-tag]}]
-  (let [{:keys [^js handle perm error]} @graph]
+(defn- pkg-editor [{:keys [pkg-tag pkg-label]}]
+  (let [{:keys [^js handle perm error]} @graph
+        help (picker-help)]
     [:fieldset {:class "pkg"}
-     [:legend "Export to Logseq"]
-     [:p {:class "help"} "Choose your Logseq graph's folder to add “Export to Logseq” to a note's Share menu. "
-      "It adds the note as a block at the end of the latest journal page, headed by the page's link and "
-      "the tag below. Exporting again updates that block."]
+     [:legend "Export to notebook"]
+     [:p {:class "help"} "Add notes to an Obsidian, Logseq, or other Markdown-based notebook. Choose its "
+      "daily notes folder (for a Logseq graph, the graph folder: its journals folder is used). An export "
+      "goes at the end of the latest note there, by file name, as an outline block headed by the page's "
+      "link and the tag below. Exporting again updates that block. The menu item appears once a folder "
+      "and tag are set."]
+     help
      [:div {:class "row graph"}
-      [:span {:class "folder"} (if handle (str "Graph folder: " (.-name handle)) "No graph folder chosen.")]
+      [:span {:class "folder"} (if handle (str "Folder: " (.-name handle)) "No folder chosen.")]
       [:div {:class "row-buttons"}
-       [:button {:class "choose" :on-click choose-graph!} (if handle "Change…" "Choose folder…")]
+       (when-not help
+         [:button {:class "choose" :on-click choose-graph!} (if handle "Change…" "Choose folder…")])
        (when (and handle (not= "granted" perm))
          [:button {:class "grant"
                    :on-click #(-> (files/request-permission handle) (.then load-graph!))}
@@ -160,9 +174,13 @@
      (when (and handle (not= "granted" perm))
        [:p {:class "status error"} "Chrome needs your permission again to write to this folder."])
      (when error [:p {:class "status error"} (str "⚠ " error)])
-     (field "Tag"
-            [:input {:type "text" :class "pkg-tag" :value pkg-tag :placeholder "tosafot"
-                     :on-input #(swap! settings assoc :pkg-tag (.. % -target -value))}])]))
+     [:div {:class "row"}
+      (field "Tag"
+             [:input {:type "text" :class "pkg-tag" :value pkg-tag :placeholder "tosafot"
+                      :on-input #(swap! settings assoc :pkg-tag (.. % -target -value))}])
+      (field "Menu item name"
+             [:input {:type "text" :class "pkg-label" :value pkg-label :placeholder "Export to notebook"
+                      :on-input #(swap! settings assoc :pkg-label (.. % -target -value))}])]]))
 
 (defn- invalid-actions [actions]
   (filter #(or (str/blank? (:label %)) (str/blank? (:prompt %))) actions))
