@@ -22,8 +22,9 @@ Upload `dist/tosafot-<version>.zip` from `bb package`.
 > • Save a note and the passage stays highlighted. Come back to the page later and your notes are still there.
 > • Customize the actions: rename them, change their questions, add instructions for the model, and choose which ones show.
 > • Share a note: copy it as Markdown, or open a post to X, Bluesky, or Mastodon with the quote and the page link.
+> • Export a note to Obsidian, Logseq, or another Markdown-based notebook. Pick the notebook's folder once, and each export adds the note to the latest journal page. Exporting it again updates it in place.
 >
-> Tosafot uses your own API key. Anthropic is the default provider; any OpenAI-compatible API works too, including local models. Notes and settings stay on your computer; the developer receives nothing. Page text goes to your provider only when you ask a question.
+> Tosafot uses your own API key. Anthropic is the default provider; any OpenAI-compatible API works too, including local models. Notes and settings stay on your computer, and the developer receives nothing. Page text goes to your provider only when you ask a question.
 >
 > Named after the Tosafot, the medieval commentaries printed in the margins of the Talmud.
 >
@@ -56,7 +57,7 @@ Upload `dist/tosafot-<version>.zip` from `bb package`.
 
 **Permission justifications:**
 
-- **storage:** Stores the user's settings (LLM provider, API key, model, custom actions) in chrome.storage.local, on the user's computer. The extension also lets users save notes: the selected passage, its position on the page, the page URL and title, and the thread of questions, answers, and the user's own comments. These are kept locally in the extension's IndexedDB database so they reappear when the user revisits the page. Neither is uploaded or synced, and the developer receives none of it.
+- **storage:** Stores the user's settings (LLM provider, API key, model, custom actions) in chrome.storage.local, on the user's computer. The extension also lets users save notes: the selected passage, its position on the page, the page URL and title, and the thread of questions, answers, and the user's own comments. These are kept locally in the extension's IndexedDB database so they reappear when the user revisits the page. If the user turns on notebook export, the extension also keeps a handle to the folder they picked, plus their export settings (tag and menu name), so later exports can write there. None of this is uploaded or synced, and the developer receives none of it.
 - **Host permission `<all_urls>`:** The content script runs on every page because the user may select text to ask about on any page they read, and because saved notes are re-highlighted when the user returns to a page. Host access is also needed for the background worker to call the LLM API the user configures. That is Anthropic by default, but it can be any OpenAI-compatible endpoint the user enters, including a local server. Page content is sent only to that endpoint, and only when the user asks a question.
 
 **Remote code:** No, I am not using remote code. (All JavaScript is in the package. The only network calls are to the user's LLM API, which returns text that is rendered as sanitized Markdown (DOMPurify), never executed.)
@@ -66,7 +67,7 @@ Upload `dist/tosafot-<version>.zip` from `bb package`.
 - **Authentication information:** the user's own API key for their LLM provider, sent only to that provider.
 - **Website content:** the selected passage, nearby page text, and the page's title and URL, sent to the user's LLM provider when they ask a question.
 
-Leave everything else unchecked. Settings and saved notes stay on the device, and nothing is sent to the developer.
+Leave everything else unchecked. Settings and saved notes stay on the device, and nothing is sent to the developer. Notebook export writes files to a folder on the user's own computer; it sends nothing over the network.
 
 **Certify all three:**
 
@@ -90,4 +91,5 @@ Leave everything else unchecked. Settings and saved notes stay on the device, an
 ## Notes for review
 
 - **Minified code:** the JavaScript is minified by the ClojureScript compiler (Closure advanced mode). It isn't obfuscated; the source is linked in the description.
+- **Notebook export:** uses the File System Access API (`showDirectoryPicker`). The user picks the folder and grants access in Chrome's own prompt. This needs no manifest permission, and the extension writes only inside that folder.
 - **Extension ID:** the store install has a different extension ID from an unpacked copy, so notes saved in one don't appear in the other.
