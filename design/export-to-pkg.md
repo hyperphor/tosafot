@@ -17,3 +17,10 @@ Export to PKG:
 - ThirdMind takes care of any other automation (if needed)
 
 
+# Changes
+
+Need separate commands:
+Export to journal...
+Export to current page...  (actually no idea how this would work, unless you can use applescript or something. Thirdmind can't )
+  and maybe
+Export to blyg (which is just journal with a #blyg tag)
