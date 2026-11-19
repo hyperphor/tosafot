@@ -79,6 +79,9 @@ a.home:hover .title { text-decoration: underline; }
 .prompts .save-form input { flex: 1; min-width: 0; font: inherit; padding: 3px 5px;
                             border: 1px solid #ccc; border-radius: 5px; }
 .turn .meta { display: flex; align-items: center; gap: 4px; }
+.turn .edit-turn { padding: 0 3px; border: none; background: none; font-size: 11px; color: #6a5acd; }
+.turn .edit-turn:hover { text-decoration: underline; background: none; }
+.turn .editor .actions { margin-top: 4px; }
 .turn .copy-turn { padding: 0 3px; border: none; background: none; opacity: 0; line-height: 0; }
 .turn:hover .copy-turn { opacity: 1; }
 .composer textarea { min-height: 2.4em; }
@@ -332,7 +335,7 @@ a.home:hover .title { text-decoration: underline; }
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
   [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-save on-delete
-           actions on-save-prompt on-edit mode prefill] :as pos}]
+           actions on-save-prompt on-edit on-edit-comment mode prefill] :as pos}]
   (let [comment-first (atom (= mode :comment))
         pending (atom prefill)   ; the prompt last picked, for its instructions
         ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
@@ -368,6 +371,8 @@ a.home:hover .title { text-decoration: underline; }
                               #(on-save-prompt %1 %2 (:instructions @pending)) on-edit)]]])]
     (reset! ask-btn (qs el "button.ask"))
     (when prefill (set! (.-value ta) (:prompt prefill)))
+    (.addEventListener el "tosafot-edit"
+                       (fn [^js e] (on-edit-comment (.. e -detail -id) (.. e -detail -text))))
     (.addEventListener ta "input" #(when (str/blank? (.-value ta)) (reset! pending nil)))
     ;; Started from Comment, Enter comments until the first submission.
     (composer-keys! ta #(if @comment-first (comment %) (ask %)) #(if @comment-first (ask %) (comment %)))
@@ -409,9 +414,45 @@ a.home:hover .title { text-decoration: underline; }
     (when-let [[label f] action]
       (.append st " " (h [:button {:on-click f} label])))))
 
+(defn- edit-turn!
+  "Swap comment turn `t`'s text for an editor; saving dispatches tosafot-edit {id, text} on `note`."
+  [^js note ^js t id]
+  (let [text-el (qs t ".text")
+        ta (h [:textarea {}])
+        close! #(do (.remove (qs t ".editor")) (set! (.. text-el -style -display) ""))
+        save! #(let [v (str/trim (.-value ta))]
+                 (when (seq v)
+                   (close!)
+                   (.dispatchEvent note (js/CustomEvent. "tosafot-edit"
+                                                         #js {:detail #js {:id id :text v}}))))]
+    (when-not (qs t ".editor")
+      (set! (.-value ta) (or (.. t -dataset -md) ""))
+      (set! (.. text-el -style -display) "none")
+      (.addEventListener ta "keydown"
+                         (fn [^js e]
+                           (case (.-key e)
+                             "Enter" (when-not (.-shiftKey e) (.preventDefault e) (save!))
+                             "Escape" (do (.preventDefault e) (close!))
+                             nil)))
+      (.after text-el (h [:div {:class "editor"} ta
+                          [:div {:class "actions"}
+                           [:button {:class "primary save-edit" :on-click save!} "Save"]
+                           [:button {:class "cancel-edit" :on-click close!} "Cancel"]]]))
+      (.focus ta))))
+
+(defn- who-text [who created edited]
+  (str who " · " (hhmm created) (when edited " · edited")))
+
+(defn mark-edited!
+  "Show turn `id` as edited."
+  [^js note id]
+  (when-let [w (some-> (turn-el note id) (qs ".meta .who"))]
+    (when-not (str/ends-with? (.-textContent w) " · edited")
+      (set! (.-textContent w) (str (.-textContent w) " · edited")))))
+
 (defn append-turn!
-  "Add a thread message to the note."
-  [^js note {:msg/keys [id author kind text created]}]
+  "Add a thread message to the note. Comments get an edit button."
+  [^js note {:msg/keys [id author kind text created edited]}]
   (some-> (qs note ".starters") .remove)
   (let [human? (= :human (:type author))
         who (cond (= kind :comment) "Note"
@@ -420,7 +461,13 @@ a.home:hover .title { text-decoration: underline; }
         el (h [:div {:class ["turn" (if human? "human" "llm") (when (= kind :comment) "comment")]
                      :data-id (str id)}
                [:div {:class "meta-row meta"}
-                [:span {:class "who"} (str who " · " (hhmm created))]
+                [:span {:class "who"} (who-text who created edited)]
+                (when (= kind :comment)
+                  [:button {:class "edit-turn" :title "Edit this comment"
+                            :on-click (fn [^js e]
+                                        (edit-turn! note (.. e -currentTarget (closest ".turn"))
+                                                    (str id)))}
+                   "edit"])
                 (when-not human?
                   [:button {:class "copy-turn" :title "Copy this answer as Markdown"
                             :on-click (fn [^js e]

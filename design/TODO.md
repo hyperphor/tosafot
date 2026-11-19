@@ -51,7 +51,7 @@ Probably the result should just append to current sidebar box, need to experimen
 
 # configurator has some weirdnesses
 
-# Allow editing of old comments
+# DONE Allow editing of old comments
 
 # old comments are not quite visible enough
 They are highlighted but that's all

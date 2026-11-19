@@ -20,7 +20,14 @@
     (is (false? (:annotation/saved? ann)))
     (is (nil? (:msg/parent q)))
     (is (= (:msg/id q) (:msg/parent a)))
-    (is (= "done" (:msg/text (second (:annotation/thread ann)))))))
+    (is (= "done" (:msg/text (second (:annotation/thread ann)))))
+    (testing "editing a message marks it edited, and that survives storage"
+      (let [e (core/edit-message ann (:msg/id q) "q2")
+            m (first (:annotation/thread (core/revive (update e :annotation/thread
+                                                              (fn [t] (mapv #(update % :msg/edited str) t))))))]
+        (is (= "q2" (:msg/text (first (:annotation/thread e)))))
+        (is (some? (:msg/edited m)))
+        (is (nil? (:msg/edited (second (:annotation/thread e)))))))))
 
 (deftest prompt-turns-test
   (testing "alternating roles, comments marked and merged with the next question"

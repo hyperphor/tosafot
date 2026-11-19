@@ -560,6 +560,31 @@ try {
   check('late-rendered text: no orphan badge left', !(await has('.orphans')));
   variant = 'normal';
 
+  // Comments can be edited, and the edit is saved.
+  await page.goto(`${base}/page`);
+  await openNote();
+  await submit('Frist draft', true);
+  await waitFor('.turn.comment .text', 'Frist');
+  check('a comment has an edit button', await has('.turn.comment .edit-turn'));
+  await (await $('.turn.comment .edit-turn')).click();
+  await waitFor('.turn.comment .editor textarea');
+  check('the editor holds the comment text', await page.evaluate(() => document.querySelector('tosafot-host')
+    .shadowRoot.querySelector('.turn.comment .editor textarea').value === 'Frist draft'));
+  await page.keyboard.down('Meta'); await page.keyboard.press('a'); await page.keyboard.up('Meta');
+  await page.keyboard.type('First draft');
+  await page.keyboard.press('Enter');
+  await waitFor('.turn.comment .text', 'First draft');
+  check('saving the edit shows the new text, marked edited',
+        !(await has('.turn.comment .editor')) && (await turns()).at(-1).meta.includes('edited'));
+  await new Promise(r => setTimeout(r, 300));
+  await closeNote();
+  await reload();
+  await clickTarget();
+  await waitFor('.note .turn.comment', null, 5000);
+  const et = (await turns()).at(-1);
+  check('the edit survives a reload', et.html.includes('First draft') && et.meta.includes('edited'), JSON.stringify(et));
+  await (await $('.note-head button.delete')).click();
+
   // Export to notebook: hidden until a folder is set; then writes the latest journal.
   // Headless Chrome has no folder picker, so the graph is an OPFS folder (always writable).
   await page.goto(`${base}/page`);

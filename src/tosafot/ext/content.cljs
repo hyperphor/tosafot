@@ -289,6 +289,15 @@
   (add-turn! id (core/message {:type :human} text :kind :comment))
   (if (saved? id) (persist! id) (save! id)))
 
+(defn- edit-comment!
+  "Replace comment `mid` (a string id) in note `id` with `text`."
+  [id mid text]
+  (when-let [el (:el (note id))]
+    (update-ann! id core/edit-message (parse-uuid mid) text)
+    (ui/set-turn-text! el mid text)
+    (ui/mark-edited! el mid)
+    (persist! id)))
+
 (defn- prompt-context
   "Selection text and surrounding page text for a note's prompt."
   [{:keys [range annotation]}]
@@ -391,6 +400,7 @@
                                    :on-delete #(delete! id)
                                    :on-ask #(ask! id %1 %2)
                                    :on-comment #(comment! id %)
+                                   :on-edit-comment #(edit-comment! id %1 %2)
                                    :on-stop #(stop! id)
                                    :mode mode
                                    :prefill prefill

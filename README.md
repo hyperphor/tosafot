@@ -16,7 +16,7 @@ Select text and a small toolbar appears: **Comment** or **Ask…** opens an empt
 
 In a sidenote, **Prompts ▾** does the same, and **Save prompt…** keeps whatever is in the box as a new prompt in your menus. Prompts are configurable on the settings page: each has a name, the question it asks (shown in the thread), optional extra instructions to the model (sent with the question but not shown), whether it's on (in the menus), and whether it's also a toolbar button. A library of built-ins (Argue, Steelman, Find the flaw, Quiz me, …) starts mostly off. Hover over an answer to copy it as Markdown.
 
-Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up (the model sees the whole thread), **⌘/Ctrl+Enter** adds your own comment without calling the model. Comments are passed to the model as notes on later asks. A note can also start as a comment: from the toolbar's **Comment**, Enter comments instead of asking until you've written the first one. **Stop** cancels a streaming answer.
+Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up (the model sees the whole thread), **⌘/Ctrl+Enter** adds your own comment without calling the model. Comments are passed to the model as notes on later asks, and you can fix one later with the **edit** button next to its time. A note can also start as a comment: from the toolbar's **Comment**, Enter comments instead of asking until you've written the first one. **Stop** cancels a streaming answer.
 
 **Share**, in the note's header, copies the thread as Markdown or opens a post to X, Bluesky, or Mastodon with the quoted passage, your comments (or, if there are none, the first answer), and the page's title and link. Mastodon goes through [share.joinmastodon.org](https://share.joinmastodon.org), which asks which server you use.
 
@@ -26,7 +26,7 @@ Notes are ephemeral until you **Save** them (adding a comment saves a note autom
 
 <br clear="right">
 
-Status: version 0.5.0. Milestone 3 (saved notes, re-anchoring, orphan list), plus the selection toolbar, configurable actions, and sharing.
+Status: version 0.7.0. Milestone 3 (saved notes, re-anchoring, orphan list), plus the selection toolbar, editable and savable prompts, comment editing, sharing, and notebook export.
 
 ## Install from a package
 

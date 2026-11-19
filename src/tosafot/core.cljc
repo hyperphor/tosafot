@@ -111,6 +111,7 @@
               (update :msg/created ->inst)
               (update-in [:msg/author :type] kw))
     (:msg/parent m) (update :msg/parent ->uuid)
+    (:msg/edited m) (update :msg/edited ->inst)
     (:msg/kind m)   (update :msg/kind kw)
     (:msg/status m) (update :msg/status kw)
     ;; A reply still streaming when it was saved was cut off.
@@ -130,6 +131,11 @@
   [ann id f & args]
   (update ann :annotation/thread
           (fn [thread] (mapv #(if (= id (:msg/id %)) (apply f % args) %) thread))))
+
+(defn edit-message
+  "Replace message `id`'s text, marking it :msg/edited now."
+  [ann id text]
+  (update-message ann id assoc :msg/text text :msg/edited (now)))
 
 (defn usable?
   "Whether a message belongs in the history sent to the model."
