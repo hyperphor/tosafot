@@ -361,6 +361,15 @@
     {:x (+ js/window.scrollX (max 8 (- js/window.innerWidth 380)))
      :y (+ js/window.scrollY 60)}))
 
+(defn- save-prompt!
+  "Add a prompt to the menus, saved in settings."
+  [label prompt instructions]
+  (let [a {:id (str (random-uuid)) :label label :place "menu" :prompt prompt
+           :instructions (or instructions "")}]
+    (swap! state update :actions (fnil conj []) a)
+    (-> (config/load-settings)
+        (.then #(config/save! (update % :actions conj a))))))
+
 (defn- pkg-ready?
   "Whether Export to notebook is set up: a folder chosen and a tag."
   []
@@ -369,8 +378,9 @@
 
 (defn- open-note!
   "Show the sidenote for registered note `id`, or bring it to the front if it's open.
-  `mode` :comment makes Enter comment in a new note's composer."
-  [id & [mode]]
+  `mode` :comment makes Enter comment in a new note's composer; `prefill` is an action whose
+  prompt starts in the composer."
+  [id & [mode prefill]]
   (when-let [{:keys [el annotation range] :as n} (note id)]
     (if el
       (.append (root) el)
@@ -379,12 +389,14 @@
                                    :on-close #(close-note! id)
                                    :on-save #(save! id)
                                    :on-delete #(delete! id)
-                                   :on-ask #(ask! id %)
+                                   :on-ask #(ask! id %1 %2)
                                    :on-comment #(comment! id %)
                                    :on-stop #(stop! id)
                                    :mode mode
+                                   :prefill prefill
                                    :actions (:actions @state)
-                                   :on-action (fn [{:keys [prompt instructions]}] (ask! id prompt instructions))
+                                   :on-save-prompt save-prompt!
+                                   :on-edit open-options!
                                    :on-export (when (pkg-ready?) #(export! id))
                                    :export-label (:pkg-label @state)
                                    :on-copy #(js/navigator.clipboard.writeText
@@ -400,20 +412,23 @@
 
 (defn- new-note!
   "Register and open a note for selection `snap`; return its id."
-  [snap kind]
+  [snap kind & [prefill]]
   (close-toolbar!)
   (let [ann (core/new-annotation {:url js/location.href :title js/document.title
                                   :target (:target snap) :kind kind})
         id (str (:annotation/id ann))]
     (swap! state assoc-in [:notes id] {:annotation ann :range (:range snap)})
-    (open-note! id kind)
+    (open-note! id kind prefill)
     id))
 
 (defn- open-empty-note!
-  "Start a note on `snap` with nothing in it yet and focus its composer."
-  [snap kind]
-  (let [id (new-note! snap kind)]
-    (some-> (:el (note id)) (.querySelector "textarea") .focus)
+  "Start a note on `snap` with nothing in it yet and focus its composer, holding `prefill`'s
+  prompt if given."
+  [snap kind & [prefill]]
+  (let [id (new-note! snap kind prefill)]
+    (when-let [^js ta (some-> (:el (note id)) (.querySelector "textarea"))]
+      (.focus ta)
+      (let [n (count (.-value ta))] (.setSelectionRange ta n n)))
     id))
 
 (defn- empty-unsaved? [{:keys [annotation]}]
@@ -471,10 +486,8 @@
                               :actions (:actions @state)
                               :on-ask #(open-empty-note! snap :ask)
                               :on-comment #(open-empty-note! snap :comment)
-                              :on-action (fn [{:keys [prompt instructions]}]
-                                           (ask! (new-note! snap :ask) prompt instructions))
-                              :on-edit #(do (close-toolbar!)
-                                            (js/chrome.runtime.sendMessage #js {:type "open-options"}))))]
+                              :on-action #(open-empty-note! snap :ask %)
+                              :on-edit #(do (close-toolbar!) (open-options!))))]
     (.append (root) el)
     (ui/clamp-x! el)
     (swap! state assoc :bubble el)))

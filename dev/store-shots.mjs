@@ -136,6 +136,7 @@ try {
     await u.select('The reaction is a form of non-enzymatic browning which typically proceeds rapidly', '#mw-content-text', 90);
     await u.waitFor('.toolbar');
     await u.click('.toolbar > .item.action');
+    await page.keyboard.press('Enter');
     await u.idle();
     await u.typeIn("So that's why you pat the steak dry first.", true);
     await u.typeIn('Does salting it the night before help or hurt the crust?');

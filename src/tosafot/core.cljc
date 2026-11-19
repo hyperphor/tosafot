@@ -17,8 +17,8 @@
   [url]
   (first (str/split (str url) #"#" 2)))
 
-;;; Actions: canned questions offered on the selection toolbar and in new notes.
-;;; :place is "toolbar", "menu" (under ⋯), or "off". Strings, not keywords, since
+;;; Actions (shown as "prompts"): canned questions in the toolbar's ⋯ menu and a note's Prompts menu.
+;;; :place is "toolbar" (menus plus a toolbar button), "menu", or "off". Strings, not keywords, since
 ;;; they round-trip through chrome.storage. :instructions go to the model but aren't shown.
 
 (defn- action [id label place prompt & [instructions]]

@@ -66,27 +66,33 @@
                     (if (< -1 j (count as)) (assoc as i (as j) j (as i)) as))))
   (render!))
 
-(def ^:private places [["toolbar" "Toolbar"] ["menu" "⋯ menu"] ["off" "Off"]])
+;;; :place stays "toolbar" / "menu" / "off" in storage: On = in the menus, Button = also on the toolbar.
 
-(defn- action-row [i {:keys [id label prompt instructions place]}]
-  (let [builtin (some #(when (= id (:id %)) %) core/builtin-actions)]
-    [:div {:class (str "action-row" (when (= place "off") " off"))}
+(defn- set-place! [i place] (update-action! i :place place) (render!))
+
+(defn- action-row [i {:keys [label prompt instructions place] :as a}]
+  (let [on? (not= place "off")]
+    [:div {:class (str "action-row" (when-not on? " off"))}
      [:div {:class "row"}
       [:input {:type "text" :class "label" :value label :placeholder "Name" :title "Name"
                :on-input #(update-action! i :label (.. % -target -value))}]
       [:input {:type "text" :class "prompt" :value prompt :placeholder "Question (shown in the thread)"
                :title "Question (shown in the thread)"
                :on-input #(update-action! i :prompt (.. % -target -value))}]
-      [:select {:class "place" :title "Where it's shown"
-                :on-change #(do (update-action! i :place (.. % -target -value)) (render!))}
-       (for [[v l] places] [:option {:value v :selected (= v place)} l])]
+      [:label {:class "inline place on" :title "Show it in the prompt menus"}
+       [:input {:type "checkbox" :checked on?
+                :on-change #(set-place! i (if (.. % -target -checked) "menu" "off"))}]
+       "On"]
+      [:label {:class "inline place button" :title "Also show it as a button on the selection toolbar"}
+       [:input {:type "checkbox" :checked (= place "toolbar")
+                :on-change #(set-place! i (if (.. % -target -checked) "toolbar" "menu"))}]
+       "Button"]
       [:div {:class "row-buttons"}
        [:button {:title "Move up" :on-click #(move-action! i -1)} "↑"]
        [:button {:title "Move down" :on-click #(move-action! i 1)} "↓"]
-       (if builtin
-         [:button {:title "Restore the built-in version"
-                   :on-click #(do (swap! settings assoc-in [:actions i] builtin) (render!))} "Reset"]
-         [:button {:on-click #(do (swap! settings update :actions
+       (when-not (core/builtin? a)
+         [:button {:class "remove"
+                   :on-click #(do (swap! settings update :actions
                                          (fn [as] (into (subvec as 0 i) (subvec as (inc i)))))
                                   (render!))} "Remove"])]]
      [:textarea {:class "instructions" :value instructions
@@ -96,17 +102,19 @@
 
 (defn- actions-editor [actions]
   [:fieldset {:class "actions-editor"}
-   [:legend "Actions"]
-   [:p {:class "help"} "Each action has a name, the question it asks (shown in the thread), and optional "
-    "extra instructions sent to the model. Show it on the toolbar that appears when you select text, "
-    "under its ⋯ menu, or not at all; shown actions also appear in a new, empty note."]
+   [:legend "Prompts"]
+   [:p {:class "help"} "Each prompt has a name, the question it asks (shown in the thread), and optional "
+    "extra instructions sent to the model. Prompts that are On appear in the selection toolbar's ⋯ menu "
+    "and in a note's Prompts menu. Choosing one puts its question in the box for you to edit before asking. "
+    "Button also puts it on the toolbar. To add one, type it in a note and "
+    "choose Prompts ▾ → Save prompt…"]
    (map-indexed action-row actions)
    [:div {:class "actions"}
     [:button {:on-click #(do (swap! settings update :actions conj
-                                    {:id (str (random-uuid)) :label "New action" :place "menu"
+                                    {:id (str (random-uuid)) :label "New prompt" :place "menu"
                                      :prompt "" :instructions ""})
                              (render!))}
-     "Add action"]
+     "Add prompt"]
     [:button {:on-click #(do (swap! settings assoc :actions core/builtin-actions) (render!))}
      "Reset all to defaults"]]])
 
@@ -209,7 +217,7 @@
       [:button {:id "save"
                 :on-click (fn []
                             (if-let [bad (seq (invalid-actions (:actions @settings)))]
-                              (do (reset! status (str "⚠ Every action needs a name and a question ("
+                              (do (reset! status (str "⚠ Every prompt needs a name and a question ("
                                                       (str/join ", " (map #(or (not-empty (:label %)) "unnamed") bad))
                                                       ")."))
                                   (render!))

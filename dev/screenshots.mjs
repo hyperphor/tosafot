@@ -110,6 +110,7 @@ try {
 
   // A thread: Explain, a comment, a follow-up.
   await (await shadow('.toolbar > .item.action')).click();
+  await page.keyboard.press('Enter');
   await waitShadow('.turn.llm .text', 'fun hp');
   await idle();
   await typeIn('So intro is literally lambda abstraction.', true);

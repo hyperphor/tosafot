@@ -30,7 +30,6 @@
 .bubble:hover { background: #f3f0ff; }
 .quote { color: #666; font-style: italic; border-left: 3px solid #e3c35a; padding: 1px 0 1px 7px;
          margin: 0 0 7px; max-height: 4.4em; overflow: hidden; }
-.starters { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 4px; }
 button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid #ccc; border-radius: 5px;
          background: #f7f7f9; color: inherit; cursor: pointer; }
 button:hover { background: #ecebf5; }
@@ -73,6 +72,15 @@ a.home:hover .title { text-decoration: underline; }
 .status:empty { display: none; }
 .status.error { color: #c0392b; }
 .composer { padding: 6px 8px; border-top: 1px solid #eee; }
+.prompts { position: relative; margin-left: auto; }
+.prompts .menu { top: auto; bottom: calc(100% + 4px); min-width: 190px; max-height: 50vh;
+                 overflow-y: auto; background: #fff; color: #1d1d1f; }
+.prompts .save-form { display: flex; gap: 4px; padding: 4px; }
+.prompts .save-form input { flex: 1; min-width: 0; font: inherit; padding: 3px 5px;
+                            border: 1px solid #ccc; border-radius: 5px; }
+.turn .meta { display: flex; align-items: center; gap: 4px; }
+.turn .copy-turn { padding: 0 3px; border: none; background: none; opacity: 0; line-height: 0; }
+.turn:hover .copy-turn { opacity: 1; }
 .composer textarea { min-height: 2.4em; }
 .share { position: relative; }
 .share .menu { min-width: 170px; background: #fff; color: #1d1d1f; cursor: default; }
@@ -92,7 +100,8 @@ a.home:hover .title { text-decoration: underline; }
   .toolbar .item:hover, .toolbar .item.open, button:hover { background: #34343a; }
   .toolbar .sep, .menu hr { background: #3a3a3e; border-color: #3a3a3e; }
   .menu { border-color: #444; }
-  .share .menu { background: #232326; color: #e8e8ea; }
+  .share .menu, .prompts .menu { background: #232326; color: #e8e8ea; }
+  .prompts .save-form input { background: #2c2c30; color: inherit; border-color: #555; }
   .icon.x { fill: #e8e8ea; }
   .menu button.item:hover { background: #34343a; }
   button, textarea { background: #2c2c30; border-color: #555; }
@@ -180,14 +189,15 @@ a.home:hover .title { text-decoration: underline; }
    label])
 
 (defn toolbar
-  "Selection toolbar: Comment, Ask…, the \"toolbar\" actions, and ⋯ for the \"menu\" ones.
-  (on-action action) runs a preset; on-ask / on-comment open an empty note."
+  "Selection toolbar: Comment, Ask…, the button prompts, and ⋯ for every enabled prompt.
+  (on-action action) opens a note with that prompt; on-ask / on-comment open an empty note."
   [{:keys [actions on-ask on-comment on-action on-edit] :as pos}]
-  (let [menu (h [:div {:class "menu" :style "display:none"}
-                 (for [a (core/actions-at actions "menu")]
+  (let [enabled (core/actions-at actions "toolbar" "menu")
+        menu (h [:div {:class "menu" :style "display:none"}
+                 (for [a enabled]
                    (item "action" (:label a) (:prompt a) #(on-action a)))
-                 (when (seq (core/actions-at actions "menu")) [:hr])
-                 (item "dim edit" "Edit actions…" "Open Tosafot settings" on-edit)])
+                 (when (seq enabled) [:hr])
+                 (item "dim edit" "Edit prompts…" "Open Tosafot settings" on-edit)])
         more (h (item "more" "⋯" "More" (fn [])))
         el (h [:div {:class "sd toolbar"}
                [:span {:class "ic"} (home-link (logo 18))]
@@ -274,21 +284,68 @@ a.home:hover .title { text-decoration: underline; }
          "Share ▾"]
         menu])))
 
+(defn- prompt-menu
+  "Prompts ▾ button for the composer. Picking a prompt puts it in `ta` without asking and calls
+  (on-pick action). Save prompt… calls (on-save label text) with the composer's text."
+  [^js ta actions on-pick on-save on-edit]
+  (let [menu (h [:div {:class "menu" :style "display:none"}])
+        show! #(set! (.. menu -style -display) (if % "" "none"))
+        save-form (fn []
+                    (let [input (h [:input {:type "text" :placeholder "Name for this prompt"}])
+                          done #(let [label (str/trim (.-value input))]
+                                  (when (seq label)
+                                    (on-save label (str/trim (.-value ta)))
+                                    (show! false)))]
+                      (.addEventListener input "keydown"
+                                         #(when (= "Enter" (.-key %)) (.preventDefault %) (done)))
+                      (.replaceChildren menu (h [:div {:class "save-form"} input
+                                                 [:button {:on-click done} "Save"]]))
+                      (.focus input)))
+        fill! (fn []
+                (.replaceChildren menu)
+                (.append menu (h [:button {:class "item save-prompt" :disabled (str/blank? (.-value ta))
+                                           :title "Keep what's in the box as a prompt in your menus"
+                                           :on-click save-form}
+                                  "Save prompt…"]))
+                (.append menu (h [:hr]))
+                (doseq [a (core/actions-at actions "toolbar" "menu")]
+                  (.append menu (h [:button {:class "item action" :title (:prompt a)
+                                             :on-click (fn []
+                                                         (show! false)
+                                                         (set! (.-value ta) (:prompt a))
+                                                         (on-pick a)
+                                                         (.focus ta))}
+                                    (:label a)])))
+                (.append menu (h [:hr]))
+                (.append menu (h [:button {:class "item dim edit" :title "Open Tosafot settings"
+                                           :on-click #(do (show! false) (on-edit))}
+                                  "Edit prompts…"])))]
+    (h [:span {:class "prompts"}
+        [:button {:class "prompts-btn" :title "Fill in a saved prompt, or save this one"
+                  :on-click #(if (= "none" (.. menu -style -display))
+                               (do (fill!) (show! true))
+                               (show! false))}
+         "Prompts ▾"]
+        menu])))
+
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
   [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-save on-delete
-           actions on-action mode] :as pos}]
+           actions on-save-prompt on-edit mode prefill] :as pos}]
   (let [comment-first (atom (= mode :comment))
+        pending (atom prefill)   ; the prompt last picked, for its instructions
         ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
         ask-btn (atom nil)
         settle! #(do (reset! comment-first false)
                      (set! (.-value ta) "")
                      (set! (.-placeholder ta) "Follow up, or comment…"))
         ask (fn [t] (when-not (.-disabled @ask-btn)
-                      (settle!)
-                      (on-ask t)))
-        comment (fn [t] (settle!) (on-comment t))
+                      (let [instructions (:instructions @pending)]
+                        (reset! pending nil)
+                        (settle!)
+                        (on-ask t instructions))))
+        comment (fn [t] (reset! pending nil) (settle!) (on-comment t))
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
                 (home-link (logo 14) [:span {:class "title"} "Tosafot"])
@@ -300,18 +357,18 @@ a.home:hover .title { text-decoration: underline; }
                [:div {:class "note-msg" :style "display:none"}]
                [:div {:class "note-body"}
                 [:div {:class "quote"} (short-quote quote 200)]
-                (when-let [as (seq (core/actions-at actions "toolbar" "menu"))]
-                  [:div {:class "starters"}
-                   (for [a as]
-                     [:button {:title (:prompt a) :on-click #(on-action a)} (:label a)])])
                 [:div {:class "thread"}]]
                [:div {:class "composer"}
                 ta
                 [:div {:class "actions"}
                  (submit-button "Ask" ta ask "primary ask")
                  (submit-button "Comment" ta comment)
-                 [:button {:class "stop" :on-click on-stop :style "display:none"} "Stop"]]]])]
+                 [:button {:class "stop" :on-click on-stop :style "display:none"} "Stop"]
+                 (prompt-menu ta actions #(reset! pending %)
+                              #(on-save-prompt %1 %2 (:instructions @pending)) on-edit)]]])]
     (reset! ask-btn (qs el "button.ask"))
+    (when prefill (set! (.-value ta) (:prompt prefill)))
+    (.addEventListener ta "input" #(when (str/blank? (.-value ta)) (reset! pending nil)))
     ;; Started from Comment, Enter comments until the first submission.
     (composer-keys! ta #(if @comment-first (comment %) (ask %)) #(if @comment-first (ask %) (comment %)))
     (isolate-keys! el)
@@ -336,6 +393,7 @@ a.home:hover .title { text-decoration: underline; }
     (let [body (qs note ".note-body")
           at-end? (< (- (.-scrollHeight body) (.-scrollTop body) (.-clientHeight body)) 30)
           text (qs t ".text")]
+      (set! (.. t -dataset -md) md)
       (set! (.-innerHTML text) (render-markdown md))
       (doseq [a (array-seq (.querySelectorAll text "a"))]
         (.setAttribute a "target" "_blank")
@@ -361,7 +419,14 @@ a.home:hover .title { text-decoration: underline; }
                   :else (or (:model author) "…"))
         el (h [:div {:class ["turn" (if human? "human" "llm") (when (= kind :comment) "comment")]
                      :data-id (str id)}
-               [:div {:class "meta"} (str who " · " (hhmm created))]
+               [:div {:class "meta-row meta"}
+                [:span {:class "who"} (str who " · " (hhmm created))]
+                (when-not human?
+                  [:button {:class "copy-turn" :title "Copy this answer as Markdown"
+                            :on-click (fn [^js e]
+                                        (js/navigator.clipboard.writeText
+                                         (or (.. e -currentTarget (closest ".turn") -dataset -md) "")))}
+                   (icon :copy)])]
                [:div {:class "text"}]
                [:div {:class "status"}]])]
     (.append (qs note ".thread") el)
@@ -369,7 +434,7 @@ a.home:hover .title { text-decoration: underline; }
     (scroll-to-end! note)))
 
 (defn set-turn-who! [^js note id who]
-  (when-let [m (some-> (turn-el note id) (qs ".meta"))]
+  (when-let [m (some-> (turn-el note id) (qs ".meta .who"))]
     (set! (.-textContent m) (str who " · " (last (str/split (.-textContent m) #" · "))))))
 
 (defn set-busy!

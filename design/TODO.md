@@ -1,7 +1,7 @@
-# TODO needs a copy button
+# DONE copy button
 Preferably producing markdown, at least for LLM output
 
-# Redo prompt option machinery
+# DONE Redo prompt option machinery
 
 Confusing options
 A prompt can appear in 3 different places:
@@ -28,7 +28,7 @@ Uh that is how it is, but Ask... looks weird there for some reason
 Comment and Ask ... are fixed (I guess they could be disabled?)
 the rest are from options
 
-# IDEA extensible prompt library
+# DONE IDEA extensible prompt library
 It already is, but you have to find the config which is a pain
 Rather, there should be a button "Save prompt..." and you can give it a label and it goes in your menus/buttons
 FOLDED into Redo Prompt Option Machinery
@@ -36,7 +36,7 @@ FOLDED into Redo Prompt Option Machinery
 Use case: annoying quiz that didn't have answers, I wanted to get them (for eductational purposes). So want to save a prompt rather than typing it over and over
 
 
-# All the options are showing up as buttons
+# DONE All the options are showing up as buttons
 Seems wrong, maybe there needs to be another level of control in config?
 
 # DONE Background system prompt

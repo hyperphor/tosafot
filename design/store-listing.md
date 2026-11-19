@@ -16,11 +16,11 @@ Upload `dist/tosafot-<version>.zip` from `bb package`.
 
 > Tosafot lets you select text on any web page and ask an LLM about it, then keep the conversation as a note in the margin.
 >
-> • Select text and a small toolbar appears: Comment, Ask…, or a one-click action like Explain, Define, or ELI5.
+> • Select text and a small toolbar appears: Comment, Ask…, or a ready-made prompt like Explain, Define, or ELI5, which you can edit before asking.
 > • Answers stream into a sidenote next to the passage. Ask follow-ups; the model sees the whole thread and the surrounding page text.
 > • Add your own comments to the thread, with or without asking anything.
 > • Save a note and the passage stays highlighted. Come back to the page later and your notes are still there.
-> • Customize the actions: rename them, change their questions, add instructions for the model, and choose which ones show.
+> • Save your own prompts from a note, or customize the built-in ones: rename them, change their questions, add instructions for the model, and choose which ones show as buttons.
 > • Share a note: copy it as Markdown, or open a post to X, Bluesky, or Mastodon with the quote and the page link.
 > • Export a note to Obsidian, Logseq, or another Markdown-based notebook. Pick the notebook's folder once, and each export adds the note to the latest journal page. Exporting it again updates it in place.
 >
@@ -57,7 +57,7 @@ Upload `dist/tosafot-<version>.zip` from `bb package`.
 
 **Permission justifications:**
 
-- **storage:** Stores the user's settings (LLM provider, API key, model, custom actions) in chrome.storage.local, on the user's computer. The extension also lets users save notes: the selected passage, its position on the page, the page URL and title, and the thread of questions, answers, and the user's own comments. These are kept locally in the extension's IndexedDB database so they reappear when the user revisits the page. If the user turns on notebook export, the extension also keeps a handle to the folder they picked, plus their export settings (tag and menu name), so later exports can write there. None of this is uploaded or synced, and the developer receives none of it.
+- **storage:** Stores the user's settings (LLM provider, API key, model, custom prompts) in chrome.storage.local, on the user's computer. The extension also lets users save notes: the selected passage, its position on the page, the page URL and title, and the thread of questions, answers, and the user's own comments. These are kept locally in the extension's IndexedDB database so they reappear when the user revisits the page. If the user turns on notebook export, the extension also keeps a handle to the folder they picked, plus their export settings (tag and menu name), so later exports can write there. None of this is uploaded or synced, and the developer receives none of it.
 - **Host permission `<all_urls>`:** The content script runs on every page because the user may select text to ask about on any page they read, and because saved notes are re-highlighted when the user returns to a page. Host access is also needed for the background worker to call the LLM API the user configures. That is Anthropic by default, but it can be any OpenAI-compatible endpoint the user enters, including a local server. Page content is sent only to that endpoint, and only when the user asks a question.
 
 **Remote code:** No, I am not using remote code. (All JavaScript is in the package. The only network calls are to the user's LLM API, which returns text that is rendered as sanitized Markdown (DOMPurify), never executed.)

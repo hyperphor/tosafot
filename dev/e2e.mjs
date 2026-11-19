@@ -348,12 +348,17 @@ try {
     await page.emulateMediaFeatures([]);
   }
   const menuItems = await texts('.toolbar .menu .item');
-  check('⋯ menu lists menu actions (custom first, new built-ins appended), not "off" ones',
-        menuItems[0] === 'Mine' && menuItems.includes('Define') && !menuItems.includes('Argue')
-        && menuItems.at(-1) === 'Edit actions…', JSON.stringify(menuItems));
-  await (await $('.toolbar .menu .item.action')).click();
+  check('⋯ menu lists every enabled prompt (stored first, new built-ins appended), not "off" ones',
+        menuItems[0] === 'Explain' && menuItems[1] === 'Mine' && menuItems.includes('Define')
+        && !menuItems.includes('Argue') && menuItems.at(-1) === 'Edit prompts…', JSON.stringify(menuItems));
+  await (await $('.toolbar .menu .item.action:nth-child(2)')).click();
   await waitFor('.note');
-  check('a menu action opens a note and asks', (await has('.note')) && !(await has('.toolbar')));
+  const ta = () => page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
+    .querySelector('.note .composer textarea').value);
+  check('a menu prompt opens a note with it in the box, not asked',
+        (await has('.note')) && !(await has('.toolbar')) && (await ta()) === 'Do mine.'
+        && !(await has('.turn')), await ta());
+  await page.keyboard.press('Enter');
   await lastLlmDone();
   const actReq = requests.at(-1).body.messages.at(-1).content;
   check('action instructions are sent to the model', actReq.endsWith('Do mine.\n<instructions>SECRET-INSTR</instructions>'), actReq);
@@ -367,8 +372,10 @@ try {
   await waitFor('.toolbar');
   await (await $('.toolbar > .item.action')).click();
   await waitFor('.note');
+  check('a toolbar button fills the box without asking', requests.length === nreq && (await ta()) === 'Explain this.');
+  await page.keyboard.press('Enter');
   await lastLlmDone();
-  check('a toolbar action asks its question', requests.length === nreq + 1 &&
+  check('Enter then asks its question', requests.length === nreq + 1 &&
         requests.at(-1).body.messages.at(-1).content.endsWith('Explain this.'));
   check('a toolbar-started note highlights its text', (await page.evaluate(() => CSS.highlights.get('tosafot')?.size)) === 1);
   await closeNote();
@@ -390,16 +397,56 @@ try {
   check('after the first comment, Enter asks again', requests.length === nreq + 1);
   await (await $('.note-head button.delete')).click();
 
+  // A note's Prompts menu fills the composer; Save prompt… adds to the menus.
   await openNote();
-  const starters = await texts('.note .starters button');
-  check('an empty note offers enabled actions as starters',
-        starters[0] === 'Explain' && starters[1] === 'Mine' && !starters.includes('Argue'), JSON.stringify(starters));
+  const composer = () => page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
+    .querySelector('.note .composer textarea').value);
+  await (await $('.note .prompts-btn')).click();
+  if (process.env.SHOT_PROMPTS) await page.screenshot({ path: process.env.SHOT_PROMPTS });
+  const pItems = await texts('.note .prompts .menu .item');
+  check('Prompts menu: Save prompt…, enabled prompts, Edit prompts…',
+        pItems[0] === 'Save prompt…' && pItems[1] === 'Explain' && pItems[2] === 'Mine'
+        && !pItems.includes('Argue') && pItems.at(-1) === 'Edit prompts…', JSON.stringify(pItems));
+  check('Save prompt… is disabled with an empty composer',
+        await page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
+          .querySelector('.note .prompts .save-prompt').disabled));
   nreq = requests.length;
-  await (await $('.note .starters button')).click();
+  await page.evaluate(() => [...document.querySelector('tosafot-host').shadowRoot
+    .querySelectorAll('.note .prompts .item.action')].find(b => b.textContent === 'Mine').click());
+  check('picking a prompt fills the composer without asking',
+        (await composer()) === 'Do mine.' && requests.length === nreq, await composer());
+  await page.keyboard.type(' Briefly.');
+  await page.keyboard.press('Enter');
   await lastLlmDone();
-  check('a starter asks its question and then disappears', requests.length === nreq + 1 &&
-        requests.at(-1).body.messages.at(-1).content.endsWith('Explain this.') && !(await has('.note .starters')));
+  const pReq = requests.at(-1).body.messages.at(-1).content;
+  check('the edited prompt is asked with its instructions',
+        pReq.endsWith('Do mine. Briefly.\n<instructions>SECRET-INSTR</instructions>'), pReq);
+  check('no starter buttons in the note', !(await has('.note .starters')));
+  await page.evaluate(() => navigator.clipboard.writeText(''));
+  await page.evaluate(() => document.querySelector('tosafot-host').shadowRoot
+    .querySelector('.turn.llm .copy-turn').click());
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  check('an answer copies as Markdown', copied.length > 0 && !copied.includes('<'), copied);
+
+  await (await $('.note .composer textarea')).focus();
+  await page.keyboard.type('Give me quiz answers.');
+  await (await $('.note .prompts-btn')).click();
+  await (await $('.note .prompts .save-prompt')).click();
+  await page.keyboard.type('Answers');
+  await page.keyboard.press('Enter');
+  await new Promise(r => setTimeout(r, 300));
+  const savedActs = await sw.evaluate(async () =>
+    (await chrome.storage.local.get('snapdragon/settings'))['snapdragon/settings'].actions);
+  const mineNew = savedActs.find(a => a.label === 'Answers');
+  check('Save prompt… stores the composer text as a menu prompt',
+        mineNew?.prompt === 'Give me quiz answers.' && mineNew?.place === 'menu', JSON.stringify(mineNew));
   await closeNote();
+  await select();
+  await waitFor('.toolbar');
+  await (await $('.toolbar .more')).click();
+  check('a saved prompt shows in the toolbar menu', (await texts('.toolbar .menu .item')).includes('Answers'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => getSelection().removeAllRanges());
 
   // Refusal is reported and excluded from later history
   await openNote();
