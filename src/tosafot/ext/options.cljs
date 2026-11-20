@@ -193,7 +193,7 @@
 (defn- invalid-actions [actions]
   (filter #(or (str/blank? (:label %)) (str/blank? (:prompt %))) actions))
 
-(defn- view [{:keys [providers system-prompt show-bubble? actions] :as s}]
+(defn- view [{:keys [providers system-prompt show-bubble? open-notes? actions] :as s}]
   (let [active (:id (config/active-provider s))]
     [:div
      (for [p providers] (provider-card p (= active (:id p))))
@@ -208,6 +208,10 @@
        [:input {:type "checkbox" :checked show-bubble?
                 :on-change #(swap! settings assoc :show-bubble? (.. % -target -checked))}]
        "Show the toolbar when text is selected (Alt+Shift+A opens a note either way)"]
+      [:label {:class "inline"}
+       [:input {:type "checkbox" :checked open-notes?
+                :on-change #(swap! settings assoc :open-notes? (.. % -target -checked))}]
+       "Open a page's notes when it loads (notes you close stay closed)"]
       (field "Extra system prompt"
              [:textarea {:value system-prompt
                          :on-input #(swap! settings assoc :system-prompt (.. % -target -value))}])]

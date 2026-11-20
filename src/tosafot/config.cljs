@@ -21,6 +21,7 @@
      :active        (:id p)
      :system-prompt ""
      :show-bubble?  true
+     :open-notes?   true
      :pkg-tag       "tosafot"
      :pkg-label     "Export to notebook"}))
 

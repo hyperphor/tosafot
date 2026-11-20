@@ -117,7 +117,6 @@ try {
   await typeIn('Who were Curry and Howard?');
   await waitShadow('.turn.llm:last-child .text', '1969');
   await idle();
-  await (await shadow('.note-head button.save')).click();
   await page.mouse.move(1090, 1090);
   const bottom = await page.evaluate(() => {
     const n = document.querySelector('tosafot-host').shadowRoot.querySelector('.note');

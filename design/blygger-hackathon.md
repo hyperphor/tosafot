@@ -8,6 +8,8 @@ A demo, not a product. Three things to show:
 
 Section references (§) are to blygger-spec `docs/protocol-v0.4.md`. The earlier design, `design/blyg-share.md` on branch `blyg-share`, covers the general multi-destination version. This doc cuts it down to the ThirdMind path and adds the Logseq sync.
 
+Note: For "logseq", read "any markdown based personal knowledge graph (tine, obsidian, etc)". The UI should probaly say PKG even though nobody knows what that is.
+
 ## The demo script
 
 1. On someone's blyg post (a blygger-studio page, e.g. on blyg.blygger.org), select a sentence and **Comment** in Tosafot: "This is the same point Engelbart made about bootstrapping." Save.
@@ -71,6 +73,8 @@ tags:: tosafot
 **Ownership (demo rule):** Tosafot owns the note block and its subtree. Anything you add under it in Logseq is overwritten at the next sync, so add your notes as sibling blocks. Two-way sync (Logseq edits flowing back into Tosafot) is out of scope.
 
 **Logseq picking it up:** Logseq reloads a page when its file changes on disk. Check before the demo whether it prompts when the page is open. If it does, keep the page closed until after the sync in step 2.
+
+ADDENDUM: has to work under page renames; that is, the source field shoud be indexed and looked up to find the Logseq page, not the name. 
 
 ## 2. Post to blyg
 
@@ -158,6 +162,9 @@ Sized for a hackathon. **Bold items are on the demo path**; the rest can be fake
 ## Open questions
 
 - **Which ThirdMind process serves the routes?** `lein serve` (the UI server) is read-only today, and `lein watch` doesn't serve HTTP. Writing from the server while the watcher runs needs one process, or a file lock. For the demo, run the routes inside `watch` (one process, already has `:write?` actions).
+
+Let's make watch and serve part of the same server (could be different processes with a file lock). I always want them both rinning.
+
 - **Per-note items.** One item per note matches "a stub responds to exactly one thing". Several notes on one page make several stubs, which is fine for the demo.
 - **Editing after posting.** Re-posting bumps the version. Should sync of a posted note republish automatically? Not for the demo: only an explicit Post publishes.
 - **Withdrawal.** Deleting a posted note in Tosafot should not silently withdraw the item. It stays until withdrawn in ThirdMind.

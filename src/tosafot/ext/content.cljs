@@ -9,8 +9,8 @@
 
 ;; :host/:root are the shadow host and root; :bubble is the transient selection toolbar.
 ;; :notes maps id -> {:annotation :range (nil for orphans) :el (when open) :port :streaming}.
-;; Unsaved notes exist only while open; saved ones stay registered when closed.
-(defonce state (atom {:notes {} :show-bubble? true :actions core/builtin-actions}))
+;; A note is saved once it has a message; empty ones exist only while open.
+(defonce state (atom {:notes {} :show-bubble? true :open-notes? true :actions core/builtin-actions}))
 
 ;;; Highlights (CSS Custom Highlight API; leaves page DOM untouched).
 ;;; "active" marks open notes; "saved" marks closed saved notes.
@@ -192,7 +192,7 @@
 
 ;;; Orphans: saved notes whose text wasn't found on the page
 
-(declare open-note!)
+(declare open-note! reopen!)
 
 (defn- render-orphans! []
   (remove-key! :orphans-el)
@@ -201,7 +201,7 @@
                      (map :annotation)
                      (sort-by :annotation/created))]
     (when (seq orphans)
-      (let [el (ui/orphan-panel orphans #(open-note! %))]
+      (let [el (ui/orphan-panel orphans #(reopen! %))]
         (.append (root) el)
         (swap! state assoc :orphans-el el)))))
 
@@ -259,14 +259,14 @@
                                         #(js/chrome.runtime.sendMessage #js {:type "open-options"})]))
         nil))))
 
-(defn- add-turn! [id msg]
+(defn- add-turn!
+  "Add `msg` to note `id`, saving the note if it's new. Callers persist."
+  [id msg]
   (update-ann! id core/add-message msg)
-  (ui/append-turn! (:el (note id)) msg))
-
-(defn- save! [id]
   (update-ann! id assoc :annotation/saved? true)
-  (some-> (:el (note id)) (ui/set-saved! true))
-  (persist! id))
+  (when-let [el (:el (note id))]
+    (ui/append-turn! el msg)
+    (ui/set-saved! el true)))
 
 (defn- open-options! [] (js/chrome.runtime.sendMessage #js {:type "open-options"}))
 
@@ -277,17 +277,15 @@
     (-> (send! {:type "pkg/export" :annotation (:annotation (note id))})
         (.then (fn [file]
                  (update-ann! id assoc :annotation/pkg-file file)
-                 (save! id)
+                 (persist! id)
                  (some-> el (ui/note-message! (str "Added to " file)))))
         (.catch (fn [^js e]
                   (some-> el (ui/note-message! (.-message e) :error? true
                                                :action ["Open settings" open-options!])))))))
 
-(defn- comment!
-  "Add a comment. Notes with your own writing in them are saved automatically."
-  [id text]
+(defn- comment! [id text]
   (add-turn! id (core/message {:type :human} text :kind :comment))
-  (if (saved? id) (persist! id) (save! id)))
+  (persist! id))
 
 (defn- edit-comment!
   "Replace comment `mid` (a string id) in note `id` with `text`."
@@ -336,15 +334,24 @@
   (when-let [mid (:streaming (note id))]
     (end-stream! id mid :stopped "Stopped.")))
 
+(defn- set-hidden!
+  "Record whether saved note `id` stays closed on page load; persists only on change."
+  [id hidden?]
+  (when (and (saved? id) (not= hidden? (boolean (get-in (note id) [:annotation :annotation/hidden?]))))
+    (update-ann! id assoc :annotation/hidden? hidden?)
+    (persist! id)))
+
 (defn- close-note!
-  "Close a note's sidenote. Saved notes stay on the page as a highlight; unsaved ones are discarded."
+  "Close a note's sidenote. Saved notes stay on the page as a highlight, and stay closed on
+  later visits; unsaved ones are discarded."
   [id]
   (stop! id)
   (when-let [{:keys [el range]} (note id)]
     (some-> el .remove)
     (if (saved? id)
       (do (swap! state update-in [:notes id] dissoc :el)
-          (highlight! range true))
+          (highlight! range true)
+          (set-hidden! id true))
       (do (unhighlight! range)
           (swap! state update :notes dissoc id)))))
 
@@ -357,6 +364,14 @@
     (render-orphans!)
     (-> (send! {:type "ann/delete" :id (str (:annotation/id annotation))})
         (.catch #(js/console.error "Tosafot: deleting note failed" %)))))
+
+(defn- unstack
+  "Move `pos` down past open notes already at that spot."
+  [{:keys [x y] :as pos}]
+  (let [taken (set (for [{:keys [^js el]} (vals (:notes @state)) :when el]
+                     [(js/parseFloat (.. el -style -left)) (js/parseFloat (.. el -style -top))]))]
+    (assoc pos :y (first (remove #(taken [(js/Math.round x) (js/Math.round %)])
+                                 (iterate #(+ % 36) y))))))
 
 (defn- note-position [{:keys [range]}]
   (if range
@@ -393,10 +408,9 @@
   (when-let [{:keys [el annotation range] :as n} (note id)]
     (if el
       (.append (root) el)
-      (let [el (ui/sidenote (assoc (note-position n)
+      (let [el (ui/sidenote (assoc (unstack (note-position n))
                                    :quote (get-in annotation [:annotation/target :quote :exact])
                                    :on-close #(close-note! id)
-                                   :on-save #(save! id)
                                    :on-delete #(delete! id)
                                    :on-ask #(ask! id %1 %2)
                                    :on-comment #(comment! id %)
@@ -419,6 +433,12 @@
         (highlight! range)
         (.append (root) el)
         (swap! state assoc-in [:notes id :el] el)))))
+
+(defn- reopen!
+  "Open note `id` at the user's request, so it shows again on later visits."
+  [id]
+  (open-note! id)
+  (set-hidden! id false))
 
 (defn- new-note!
   "Register and open a note for selection `snap`; return its id."
@@ -457,7 +477,9 @@
                  [id (offsets->range idx s e)])]
     (doseq [[id range] (doall placed)]
       (swap! state assoc-in [:notes id :range] range)
-      (highlight! range (not (:el (note id)))))
+      (if (and (:open-notes? @state) (not (get-in (note id) [:annotation :annotation/hidden?])))
+        (open-note! id)
+        (highlight! range (not (:el (note id))))))
     (render-orphans!)
     (count (filter #(and (nil? (:range %)) (get-in % [:annotation :annotation/saved?]))
                    (vals (:notes @state))))))
@@ -523,7 +545,7 @@
                                    (and range (try (.isPointInRange range node off) (catch :default _ false)))))
                          (sort-by (fn [[_ {:keys [^js range]}]] (count (.toString range))))
                          ffirst)]
-        (open-note! id)))))
+        (reopen! id)))))
 
 (defn- dismiss-unused!
   "Close notes that were opened but never written in, like a popover would be."
@@ -557,14 +579,14 @@
 
 (defn- load-prefs! []
   (-> (config/load-settings)
-      (.then #(swap! state merge (select-keys % [:show-bubble? :actions :pkg-folder :pkg-tag :pkg-label])))
+      (.then #(swap! state merge (select-keys % [:show-bubble? :open-notes? :actions :pkg-folder :pkg-tag :pkg-label])))
       (.catch (fn [_] nil))))
 
 (defn init []
   (when-not (.-__tosafot js/window)
     (set! (.-__tosafot js/window) true)
-    (load-prefs!)
-    (load-saved!)
+    ;; Prefs first: notes opened on load are built with the configured actions.
+    (.then (load-prefs!) load-saved!)
     (.addListener js/chrome.storage.onChanged load-prefs!)
     (.addListener js/chrome.runtime.onMessage on-runtime-message)
     (js/document.addEventListener "mousedown" on-mousedown true)

@@ -47,7 +47,6 @@ a.home:hover .title { text-decoration: underline; }
 .note-head .title { color: #6a5acd; font-weight: 600; }
 .note-head button { padding: 0 6px; border: none; background: none; font-size: 11px; color: inherit; }
 .note-head button.close { font-size: 14px; }
-.note-head button.save:disabled { opacity: 1; color: #2a7; }
 .orphans { position: fixed; right: 16px; bottom: 16px; width: 300px; padding: 0; }
 .orphans .badge { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer;
                   font-size: 12px; }
@@ -334,7 +333,7 @@ a.home:hover .title { text-decoration: underline; }
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
-  [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-save on-delete
+  [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-delete
            actions on-save-prompt on-edit on-edit-comment mode prefill] :as pos}]
   (let [comment-first (atom (= mode :comment))
         pending (atom prefill)   ; the prompt last picked, for its instructions
@@ -353,8 +352,7 @@ a.home:hover .title { text-decoration: underline; }
                [:div {:class "note-head"}
                 (home-link (logo 14) [:span {:class "title"} "Tosafot"])
                 (share-menu on-copy on-share on-export export-label)
-                [:button {:class "save" :title "Keep this note on this page" :on-click on-save} "Save"]
-                [:button {:class "delete" :title "Delete this saved note" :on-click on-delete
+                [:button {:class "delete" :title "Delete this note" :on-click on-delete
                           :style "display:none"} "Delete"]
                 [:button {:class "close" :title "Close" :on-click on-close} "×"]]
                [:div {:class "note-msg" :style "display:none"}]
@@ -501,12 +499,9 @@ a.home:hover .title { text-decoration: underline; }
       (.append m (h [:button {:on-click f} label])))))
 
 (defn set-saved!
-  "Reflect whether the note is saved: Save becomes a disabled \"Saved\" label, Delete appears."
+  "Show Delete once the note is saved."
   [^js note saved?]
-  (let [save (qs note "button.save")]
-    (set! (.-disabled save) saved?)
-    (set! (.-textContent save) (if saved? "Saved ✓" "Save"))
-    (set! (.. (qs note "button.delete") -style -display) (if saved? "" "none"))))
+  (set! (.. (qs note "button.delete") -style -display) (if saved? "" "none")))
 
 (def ^:private status-text
   {:refused "The model declined to answer."

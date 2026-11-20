@@ -484,10 +484,14 @@ try {
   await submit('What is this?');
   await waitFor('.turn.llm .text', 'proofs to programs');
   await lastLlmDone();
-  check('new notes start unsaved', (await (await $('.note-head button.save')).evaluate(b => b.textContent)) === 'Save');
-  await (await $('.note-head button.save')).click();
-  check('Save marks the note saved',
-        await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓' && b.disabled));
+  check('there is no Save button', !(await has('.note-head button.save')));
+  check('a note with a message is saved (Delete shows)',
+        await (await $('.note-head button.delete')).evaluate(b => b.style.display !== 'none'));
+
+  await reload();
+  check('saved notes open on load', await waitFor('.note', null, 5000).then(() => true, () => false));
+  ts = await turns();
+  check('auto-opened note has its thread', ts.length === 2 && ts[1].html.includes('proofs to programs'), JSON.stringify(ts));
   await closeNote();
   check('closing a saved note leaves a saved highlight', (await savedSize()) === 1);
 
@@ -497,13 +501,19 @@ try {
   check('saved note is highlighted after reload', (await savedSize()) === 1);
   check('saved highlight covers the original text', (await savedText())[0] === 'Curry-Howard correspondence',
         JSON.stringify(await savedText()));
-  check('saved notes start closed', !(await has('.note')));
+  await new Promise(r => setTimeout(r, 300));
+  check('a note you closed stays closed on load', !(await has('.note')));
   await clickTarget();
   check('clicking the highlight opens the note', await waitFor('.note', null, 3000).then(() => true, () => false));
   ts = await turns();
   check('reopened note has its thread', ts.length === 2 && ts[1].html.includes('proofs to programs'), JSON.stringify(ts));
-  check('reopened note shows as saved',
-        await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓'));
+  await new Promise(r => setTimeout(r, 300));
+  await reload();
+  check('a reopened note opens on load again', await waitFor('.note', null, 5000).then(() => true, () => false));
+  await closeNote();
+  await new Promise(r => setTimeout(r, 300));
+  await clickTarget();
+  await waitFor('.note', null, 3000);
   await follow('Who named it?');
   await page.waitForFunction(() =>
     document.querySelector('tosafot-host').shadowRoot.querySelectorAll('.turn.llm').length === 2);
@@ -550,7 +560,7 @@ try {
   await submit('Check against the HoTT book', true);
   await waitFor('.turn.comment .text', 'HoTT book');
   check('commenting saves the note',
-        await (await $('.note-head button.save')).evaluate(b => b.textContent === 'Saved ✓'));
+        await (await $('.note-head button.delete')).evaluate(b => b.style.display !== 'none'));
   await closeNote();
   variant = 'late';
   await reload();
