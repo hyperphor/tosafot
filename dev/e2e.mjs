@@ -510,6 +510,26 @@ try {
   await new Promise(r => setTimeout(r, 300));
   await reload();
   check('a reopened note opens on load again', await waitFor('.note', null, 5000).then(() => true, () => false));
+  const notePos = () => page.evaluate(() => {
+    const n = document.querySelector('tosafot-host').shadowRoot.querySelector('.note');
+    return { x: n.offsetLeft, y: n.offsetTop };
+  });
+  const p0 = await notePos();
+  const head = await page.evaluate(() => {
+    const r = document.querySelector('tosafot-host').shadowRoot.querySelector('.note-head .title').getBoundingClientRect();
+    return { x: r.right + 30, y: r.top + r.height / 2 };
+  });
+  await page.mouse.move(head.x, head.y);
+  await page.mouse.down();
+  await page.mouse.move(head.x - 120, head.y + 90, { steps: 5 });
+  await page.mouse.up();
+  const p1 = await notePos();
+  check('dragging moves the note', p1.x === p0.x - 120 && p1.y === p0.y + 90, JSON.stringify([p0, p1]));
+  await new Promise(r => setTimeout(r, 300));
+  await reload();
+  await waitFor('.note', null, 5000);
+  check('a dragged note reopens where it was left', JSON.stringify(await notePos()) === JSON.stringify(p1),
+        JSON.stringify([p1, await notePos()]));
   await closeNote();
   await new Promise(r => setTimeout(r, 300));
   await clickTarget();

@@ -22,11 +22,11 @@ Each note is a thread. Type in the box at its bottom: **Enter** asks a follow-up
 
 **Export to notebook** (the name is configurable), also in the Share menu, adds the note to an Obsidian, Logseq, or other Markdown-based notebook. It appears once you've chosen the notebook's daily notes folder in settings (for a Logseq graph, choose the graph folder; its `journals/` is used) and set a tag. The note goes in as an outline block at the end of the latest note there (by file name), headed by the page's link and the tag (`#tosafot` by default). The quote, your questions, and your comments are child blocks, and answers sit under an `#AskClaude` block, as the logseq-claude plugin does. The block carries an `id::`, so exporting again updates it where it is. Chrome may ask you to allow access to the folder again after a restart; settings has a button for that. **Brave** turns off the folder picker this uses: open `brave://flags/#file-system-access-api`, set "File System Access API" to Enabled, and relaunch.
 
-A note is saved as soon as it has a question or comment in it; one you open and leave empty is discarded. Saved notes are stored in the extension and come back when you revisit the page, opened beside their text. A note you close stays closed on later visits, its text highlighted with a dotted underline; clicking the highlight reopens it. (Settings can turn off opening notes on load.) If the text a note was attached to is no longer on the page, a badge in the bottom-right corner lists it. **Delete** removes a saved note.
+A note is saved as soon as it has a question or comment in it; one you open and leave empty is discarded. Saved notes are stored in the extension and come back when you revisit the page, opened beside their text, or wherever you last dragged them. A note you close stays closed on later visits, its text highlighted with a dotted underline; clicking the highlight reopens it. (Settings can turn off opening notes on load.) If the text a note was attached to is no longer on the page, a badge in the bottom-right corner lists it. **Delete** removes a saved note.
 
 <br clear="right">
 
-Status: version 0.8.0. Milestone 3 (saved notes, re-anchoring, orphan list), plus the selection toolbar, editable and savable prompts, comment editing, sharing, and notebook export.
+Status: version 0.8.1. Milestone 3 (saved notes, re-anchoring, orphan list), plus the selection toolbar, editable and savable prompts, comment editing, sharing, and notebook export.
 
 ## Install from a package
 

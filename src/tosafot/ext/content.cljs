@@ -373,7 +373,21 @@
     (assoc pos :y (first (remove #(taken [(js/Math.round x) (js/Math.round %)])
                                  (iterate #(+ % 36) y))))))
 
-(defn- note-position [{:keys [range]}]
+(defn- range-origin
+  "Document coords of the top left of `range`."
+  [^js range]
+  (let [r (.getBoundingClientRect range)]
+    {:x (+ (.-left r) js/window.scrollX) :y (+ (.-top r) js/window.scrollY)}))
+
+(defn- moved!
+  "Remember where note `id` was dragged to, relative to its text."
+  [id {:keys [x y]}]
+  (when-let [range (:range (note id))]
+    (let [o (range-origin range)]
+      (update-ann! id assoc :annotation/offset {:dx (- x (:x o)) :dy (- y (:y o))})
+      (persist! id))))
+
+(defn- base-position [range]
   (if range
     (ui/sidenote-position {:sel-rect   (.getBoundingClientRect range)
                            :block-rect (.getBoundingClientRect (nearest-block range))
@@ -384,6 +398,13 @@
     ;; Orphans open near the top right of the viewport.
     {:x (+ js/window.scrollX (max 8 (- js/window.innerWidth 380)))
      :y (+ js/window.scrollY 60)}))
+
+(defn- note-position [{:keys [range annotation]}]
+  (if-let [{:keys [dx dy]} (and range (:annotation/offset annotation))]
+    (let [o (range-origin range)
+          max-x (- (.. js/document -documentElement -scrollWidth) 368)]
+      {:x (max 0 (min (+ (:x o) dx) max-x)) :y (max 0 (+ (:y o) dy))})
+    (unstack (base-position range))))
 
 (defn- save-prompt!
   "Add a prompt to the menus, saved in settings."
@@ -408,13 +429,14 @@
   (when-let [{:keys [el annotation range] :as n} (note id)]
     (if el
       (.append (root) el)
-      (let [el (ui/sidenote (assoc (unstack (note-position n))
+      (let [el (ui/sidenote (assoc (note-position n)
                                    :quote (get-in annotation [:annotation/target :quote :exact])
                                    :on-close #(close-note! id)
                                    :on-delete #(delete! id)
                                    :on-ask #(ask! id %1 %2)
                                    :on-comment #(comment! id %)
                                    :on-edit-comment #(edit-comment! id %1 %2)
+                                   :on-move #(moved! id %)
                                    :on-stop #(stop! id)
                                    :mode mode
                                    :prefill prefill

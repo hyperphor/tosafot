@@ -226,7 +226,9 @@ a.home:hover .title { text-decoration: underline; }
       (set! (.. el -style -left) (px (max js/window.scrollX max-x))))
     el))
 
-(defn- draggable! [^js el ^js handle]
+(defn- draggable!
+  "Drag `el` by `handle`; after a drag that moved it, calls (on-move {:x :y}) in document coords."
+  [^js el ^js handle on-move]
   (.addEventListener
    handle "mousedown"
    (fn [^js e]
@@ -234,10 +236,16 @@ a.home:hover .title { text-decoration: underline; }
        (.preventDefault e)
        (let [x0 (- (.-pageX e) (.-offsetLeft el))
              y0 (- (.-pageY e) (.-offsetTop el))
-             move (fn [^js m] (at el {:x (- (.-pageX m) x0) :y (- (.-pageY m) y0)}))]
+             moved? (volatile! false)
+             move (fn [^js m]
+                    (vreset! moved? true)
+                    (at el {:x (- (.-pageX m) x0) :y (- (.-pageY m) y0)}))]
          (js/document.addEventListener "mousemove" move)
          (js/document.addEventListener "mouseup"
-                                       #(js/document.removeEventListener "mousemove" move)
+                                       (fn [_]
+                                         (js/document.removeEventListener "mousemove" move)
+                                         (when (and @moved? on-move)
+                                           (on-move {:x (.-offsetLeft el) :y (.-offsetTop el)})))
                                        #js {:once true}))))))
 
 ;;; Service logos from simple-icons (CC0), 24x24 paths.
@@ -334,7 +342,7 @@ a.home:hover .title { text-decoration: underline; }
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
   [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-delete
-           actions on-save-prompt on-edit on-edit-comment mode prefill] :as pos}]
+           actions on-save-prompt on-edit on-edit-comment on-move mode prefill] :as pos}]
   (let [comment-first (atom (= mode :comment))
         pending (atom prefill)   ; the prompt last picked, for its instructions
         ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
@@ -375,7 +383,7 @@ a.home:hover .title { text-decoration: underline; }
     ;; Started from Comment, Enter comments until the first submission.
     (composer-keys! ta #(if @comment-first (comment %) (ask %)) #(if @comment-first (ask %) (comment %)))
     (isolate-keys! el)
-    (draggable! el (qs el ".note-head"))
+    (draggable! el (qs el ".note-head") on-move)
     (at el pos)))
 
 (defn- render-markdown [md]
