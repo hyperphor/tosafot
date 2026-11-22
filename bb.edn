@@ -8,6 +8,9 @@
   e2e     {:doc "Build, then drive the extension in Chrome against a mock LLM"
            :depends [build]
            :task (shell "node dev/e2e.mjs")}
+  db      {:doc "Snapshot the extension's notes from Brave into out/tosafot.db and open sqlite3"
+           :task (do (shell "node dev/dump-db.mjs out/tosafot.db")
+                     (apply shell "sqlite3 -header -column out/tosafot.db" *command-line-args*))}
   icons   {:doc "Render ext/icons/*.png from assets/*.svg (needs rsvg-convert)"
            :task (do (shell "rsvg-convert -w 16 assets/icon-small.svg -o ext/icons/icon16.png")
                      (doseq [n [32 48 128]]
