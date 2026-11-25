@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tosafot",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "minimum_chrome_version": "105",
   "homepage_url": "https://github.com/hyperphor/tosafot",
   "description": "Select text on any page and ask an LLM about it.",
