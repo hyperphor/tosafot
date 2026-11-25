@@ -38,7 +38,7 @@ button.primary { background: #ece6ff; border-color: #b9a8f0; }
 textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; padding: 5px;
            border: 1px solid #ccc; border-radius: 5px; background: #fff; color: inherit; }
 .actions { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
-.note { width: 360px; max-height: 75vh; display: flex; flex-direction: column; }
+.note { width: var(--w, 360px); max-height: 75vh; display: flex; flex-direction: column; }
 .note-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: move;
              border-bottom: 1px solid #eee; color: #777; font-size: 11px; user-select: none; }
 a.home { display: flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
@@ -56,6 +56,13 @@ a.home:hover .title { text-decoration: underline; }
 .orphans li:hover { background: #f3f0ff; }
 .orphans .first { color: #888; font-size: 12px; }
 .note-body { padding: 7px 10px; overflow-y: auto; flex: 1; min-height: 0; }
+/* Compact: just the comments, until hovered or focused. */
+.note.compact:not(:hover):not(:focus-within) { width: min(220px, var(--w, 360px)); box-shadow: 0 1px 5px rgba(0,0,0,.12); }
+.note.compact:not(:hover):not(:focus-within) :is(.note-head, .note-msg, .quote, .composer,
+  .turn:not(.comment), .turn .meta, .turn .status) { display: none; }
+.note.compact:not(:hover):not(:focus-within) .note-body { padding: 4px; max-height: 5.6em; overflow: hidden; }
+.note.compact:not(:hover):not(:focus-within) .turn { margin: 0; font-size: 12px; }
+.note.compact:not(:hover):not(:focus-within) .turn + .turn { margin-top: 3px; }
 .turn { margin: 0 0 9px; }
 .turn .meta { font-size: 11px; color: #999; margin-bottom: 1px; }
 .turn.human .text { font-weight: 600; }
@@ -338,15 +345,21 @@ a.home:hover .title { text-decoration: underline; }
          "Prompts ▾"]
         menu])))
 
+(defn set-compact!
+  "Shrink `note` to its comments, expanding on hover or focus; false restores it."
+  [^js note compact?]
+  (.toggle (.-classList note) "compact" (boolean compact?)))
+
 (defn sidenote
   "Ephemeral note holding a thread, with a composer for follow-ups and comments.
   Submitting clears the composer; asking is refused (text kept) while an answer streams."
   [{:keys [quote on-close on-copy on-share on-export export-label on-ask on-comment on-stop on-delete
-           actions on-save-prompt on-edit on-edit-comment on-move mode prefill] :as pos}]
+           actions on-save-prompt on-edit on-edit-comment on-move mode prefill width] :as pos}]
   (let [comment-first (atom (= mode :comment))
         pending (atom prefill)   ; the prompt last picked, for its instructions
         ta (h [:textarea {:placeholder (if @comment-first "Write a comment…" "Ask about this, or comment…")}])
         ask-btn (atom nil)
+        note-el (atom nil)
         settle! #(do (reset! comment-first false)
                      (set! (.-value ta) "")
                      (set! (.-placeholder ta) "Follow up, or comment…"))
@@ -355,7 +368,7 @@ a.home:hover .title { text-decoration: underline; }
                         (reset! pending nil)
                         (settle!)
                         (on-ask t instructions))))
-        comment (fn [t] (reset! pending nil) (settle!) (on-comment t))
+        comment (fn [t] (reset! pending nil) (settle!) (on-comment t) (set-compact! @note-el true))
         el (h [:div {:class "sd note"}
                [:div {:class "note-head"}
                 (home-link (logo 14) [:span {:class "title"} "Tosafot"])
@@ -376,6 +389,10 @@ a.home:hover .title { text-decoration: underline; }
                  (prompt-menu ta actions #(reset! pending %)
                               #(on-save-prompt %1 %2 (:instructions @pending)) on-edit)]]])]
     (reset! ask-btn (qs el "button.ask"))
+    (reset! note-el el)
+    (when width (.setProperty (.-style el) "--w" (px width)))
+    ;; Pressing anywhere in a compact note keeps it expanded.
+    (.addEventListener el "mousedown" #(set-compact! el false))
     (when prefill (set! (.-value ta) (:prompt prefill)))
     (.addEventListener el "tosafot-edit"
                        (fn [^js e] (on-edit-comment (.. e -detail -id) (.. e -detail -text))))
@@ -543,12 +560,22 @@ a.home:hover .title { text-decoration: underline; }
         list-el])))
 
 (defn sidenote-position
-  "Place a note right of the selection's block if there's room, else below the selection.
-  Rects are viewport rects; returns document coords."
+  "Place a note in the margin beside the selection's block (right, else left), narrowed to fit
+  down to 240px; else below the selection. Rects are viewport rects; returns document coords and :width."
   [{:keys [^js sel-rect ^js block-rect doc-width view-width scroll-x scroll-y]}]
-  (let [w 360 gap 16
-        right (+ (.-right block-rect) gap)]
-    (if (<= (+ right w) (min doc-width view-width))
-      {:x (+ right scroll-x) :y (+ (.-top sel-rect) scroll-y)}
-      {:x (+ scroll-x (max 8 (min (.-left sel-rect) (- view-width w 8))))
-       :y (+ (.-bottom sel-rect) scroll-y 8)})))
+  (let [w 360 min-w 240 gap 16 edge 8
+        top (+ (.-top sel-rect) scroll-y)
+        right-room (- (min doc-width view-width) (.-right block-rect) gap edge)
+        left-room (- (.-left block-rect) gap edge)]
+    (cond
+      (>= right-room min-w)
+      {:x (+ (.-right block-rect) gap scroll-x) :y top :width (min w right-room)}
+
+      (>= left-room min-w)
+      (let [w (min w left-room)]
+        {:x (+ scroll-x (- (.-left block-rect) gap w)) :y top :width w})
+
+      :else
+      {:x (+ scroll-x (max edge (min (.-left sel-rect) (- view-width w edge))))
+       :y (+ (.-bottom sel-rect) scroll-y edge)
+       :width w})))

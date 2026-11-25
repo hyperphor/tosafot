@@ -500,7 +500,10 @@
     (doseq [[id range] (doall placed)]
       (swap! state assoc-in [:notes id :range] range)
       (if (and (:open-notes? @state) (not (get-in (note id) [:annotation :annotation/hidden?])))
-        (open-note! id)
+        (do (open-note! id)
+            ;; Notes ending in a comment open compact on load.
+            (when (= :comment (:msg/kind (last (get-in (note id) [:annotation :annotation/thread]))))
+              (ui/set-compact! (:el (note id)) true)))
         (highlight! range (not (:el (note id))))))
     (render-orphans!)
     (count (filter #(and (nil? (:range %)) (get-in % [:annotation :annotation/saved?]))
